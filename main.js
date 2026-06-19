@@ -20,6 +20,7 @@ import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
 import {
   COLOR_PRESETS, PATTERN_PRESETS, imageCss, sanitizeBg, downscaleImage,
 } from "./background.js";
+import { createFaceFramer } from "./faceframe.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -36,6 +37,7 @@ const roomNameEl = document.getElementById("room-name");
 const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
+const toggleFrameBtn = document.getElementById("toggle-frame");
 const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
 const chatInput = document.getElementById("chat-input");
@@ -128,6 +130,8 @@ let lastFrame = null;
 let running = false;
 let localStream = null;
 let session = null;
+let faceFramer = null;
+let faceFrameOn = loadFaceFramePref();
 
 // id -> { el, head, video, veil } for each known remote participant.
 const remoteTiles = new Map();
@@ -158,8 +162,19 @@ async function start() {
   saveUsername();
 
   try {
-    localStream = await getStream();
+    const raw = await getStream();
+    // Route the camera through the face-framer (crops/zooms to the face) so the
+    // framed video is what we show and send. Falls back to the raw stream if the
+    // pipeline can't be set up.
+    try {
+      faceFramer = createFaceFramer(raw, { enabled: faceFrameOn });
+      localStream = faceFramer.stream;
+    } catch (e) {
+      console.warn("[faceframe] setup failed, using raw stream:", e);
+      localStream = raw;
+    }
     selfVideo.srcObject = localStream;
+    updateFrameBtn();
   } catch (err) {
     showError(err);
     startBtn.disabled = false;
@@ -975,6 +990,28 @@ function toggleBodies() {
   toggleBodyBtn.textContent = on ? "Hide bodies" : "Show bodies";
 }
 
+// ---- Face auto-framing ----
+
+function loadFaceFramePref() {
+  try {
+    return localStorage.getItem("funmeets-faceframe") !== "off";
+  } catch (_) {
+    return true;
+  }
+}
+
+function updateFrameBtn() {
+  toggleFrameBtn.textContent = "Auto-frame: " + (faceFrameOn ? "On" : "Off");
+  toggleFrameBtn.classList.toggle("active", faceFrameOn);
+}
+
+function toggleFaceFrame() {
+  faceFrameOn = !faceFrameOn;
+  if (faceFramer) faceFramer.setEnabled(faceFrameOn);
+  try { localStorage.setItem("funmeets-faceframe", faceFrameOn ? "on" : "off"); } catch (_) {}
+  updateFrameBtn();
+}
+
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running) return;
@@ -1000,6 +1037,7 @@ usernameInput.addEventListener("keydown", (e) => {
 });
 copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
+toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
 bgUrl.addEventListener("focus", resetHeld);
@@ -1018,4 +1056,7 @@ renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
-window.addEventListener("beforeunload", () => session && session.leave());
+window.addEventListener("beforeunload", () => {
+  if (session) session.leave();
+  if (faceFramer) faceFramer.stop();
+});
