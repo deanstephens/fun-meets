@@ -103,6 +103,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - The name is shared with the room and sent to new joiners; names are
   sanitised and length-capped, and treated as untrusted when received.
 
+### Milestone 12 — Face auto-framing ✅
+- Optionally centre and zoom the camera on your face so it fills the circular
+  head. Face detection runs in-browser (MediaPipe, loaded from a CDN); the
+  framed video is rendered to a canvas and that stream is what's shown and sent
+  to peers, so everyone sees your centred face. Toggleable, smoothed, and falls
+  back to a plain centre-crop if no face is found or the model can't load.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -118,7 +125,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–11 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, and user-chosen display names.
+🚧 Early development. Milestones 1–12 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, and face auto-framing.
 
 ## Getting Started
 
