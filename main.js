@@ -17,6 +17,9 @@ import {
   normalizeAvatar, applyAvatar,
 } from "./avatar.js";
 import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
+import {
+  COLOR_PRESETS, PATTERN_PRESETS, imageCss, sanitizeBg, downscaleImage,
+} from "./background.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -52,6 +55,16 @@ const emojiToggleBtn = document.getElementById("emoji-toggle");
 const emojiPalette = document.getElementById("emoji-palette");
 const trailToggleBtn = document.getElementById("trail-toggle");
 
+// Background elements
+const bgSection = document.getElementById("bgpanel");
+const bgToggleBtn = document.getElementById("bg-toggle");
+const bgColors = document.getElementById("bg-colors");
+const bgPatterns = document.getElementById("bg-patterns");
+const bgUrl = document.getElementById("bg-url");
+const bgUrlApply = document.getElementById("bg-url-apply");
+const bgFile = document.getElementById("bg-file");
+const bgReset = document.getElementById("bg-reset");
+
 // Dev console elements
 const consoleSection = document.getElementById("devconsole");
 const consoleToggleBtn = document.getElementById("console-toggle");
@@ -79,6 +92,12 @@ const avatarConfig = loadAvatar();
 const emojiState = loadEmoji();
 let lastTrail = 0;
 const TRAIL_INTERVAL = 130; // ms between trail drops while moving
+
+// The room's current background CSS ("" = the stylesheet default). Shared.
+// The host is authoritative: it (re)sends the room background to new joiners,
+// so a newcomer's default doesn't clobber what the room already chose.
+let currentBg = "";
+let amHost = false;
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -167,7 +186,10 @@ async function start() {
         dcCount.textContent = String(s.peerCount);
       }
       if (s.myId) dcMyId.textContent = s.myId;
-      if (typeof s.isHost === "boolean") dcRole.textContent = s.isHost ? "host" : "guest";
+      if (typeof s.isHost === "boolean") {
+        amHost = s.isHost;
+        dcRole.textContent = s.isHost ? "host" : "guest";
+      }
       if (s.error) {
         console.warn("[mesh] status error:", s.error);
         appendConsoleLog("status error: " + s.error);
@@ -186,11 +208,15 @@ async function start() {
       renderConsolePeers();
     },
     onLog: (line) => appendConsoleLog(line),
-    // A peer just connected — send them our current position and look.
+    // A peer just connected — send them our current position, look, and the
+    // room background so they match.
     onPeerJoin: (id) => {
       if (!session) return;
       session.sendTo(id, posMessage());
       session.sendTo(id, avatarMessage());
+      // Only the host hands out the room background, so a newcomer's default
+      // doesn't overwrite it.
+      if (amHost) session.sendTo(id, { type: "background", css: currentBg });
     },
     // A peer told us where their tile is, or said something.
     onMessage: (id, data) => {
@@ -230,6 +256,8 @@ async function start() {
           spawnThrow(emojiLayer, emoji, c.x, c.y,
             clamp01(data.nx) * stage.clientWidth, clamp01(data.ny) * stage.clientHeight);
         }
+      } else if (data.type === "background") {
+        applyBackground(sanitizeBg(data.css));
       }
     },
   });
@@ -501,7 +529,8 @@ function loop(timestamp) {
 }
 
 function isTyping() {
-  return document.activeElement === chatInput;
+  const el = document.activeElement;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
 }
 
 // Drop any held movement keys (e.g. when focus moves into the chat box, so the
@@ -513,7 +542,7 @@ function resetHeld() {
 
 function onKeyDown(e) {
   if (isTyping()) {
-    if (e.key === "Escape") chatInput.blur();
+    if (e.key === "Escape" && document.activeElement) document.activeElement.blur();
     return; // let the input field handle the keystroke
   }
   // Enter focuses the chat box for a quick message (expanding it if collapsed).
@@ -761,6 +790,63 @@ function toggleEmojiPanel() {
   emojiToggleBtn.textContent = collapsed ? "Show" : "Hide";
 }
 
+// ---- Room background ----
+
+function applyBackground(css) {
+  currentBg = css || "";
+  stage.style.background = currentBg; // "" falls back to the stylesheet gradient
+  highlightBg();
+}
+
+// Apply locally and share with the room.
+function setBackground(css) {
+  applyBackground(css);
+  if (session) session.broadcast({ type: "background", css: currentBg });
+}
+
+function highlightBg() {
+  document
+    .querySelectorAll(".bg-swatch")
+    .forEach((b) => b.classList.toggle("active", b.dataset.css === currentBg));
+}
+
+function buildBgUI() {
+  const swatch = (p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bg-swatch";
+    b.title = p.label;
+    b.dataset.css = p.reset ? "" : p.css; // "Default" resets to the stylesheet
+    b.style.background = p.css;
+    b.style.backgroundSize = "cover";
+    b.addEventListener("click", () => setBackground(b.dataset.css));
+    return b;
+  };
+  COLOR_PRESETS.forEach((p) => bgColors.appendChild(swatch(p)));
+  PATTERN_PRESETS.forEach((p) => bgPatterns.appendChild(swatch(p)));
+  highlightBg();
+}
+
+function applyImageUrl() {
+  const url = bgUrl.value.trim();
+  if (url) setBackground(imageCss(url));
+}
+
+function onBgFile() {
+  const file = bgFile.files && bgFile.files[0];
+  if (!file) return;
+  downscaleImage(file, 1280, (dataUrl) => {
+    if (dataUrl) setBackground(imageCss(dataUrl));
+  });
+  bgFile.value = "";
+}
+
+function toggleBgPanel() {
+  const collapsed = !bgSection.classList.contains("collapsed");
+  bgSection.classList.toggle("collapsed", collapsed);
+  bgToggleBtn.textContent = collapsed ? "Show" : "Hide";
+}
+
 // ---- Dev console ----
 
 function appendConsoleLog(line) {
@@ -835,6 +921,7 @@ function onStageClick(e) {
 applyAvatar(selfTile, avatarConfig);
 buildAvatarUI();
 buildEmojiUI();
+buildBgUI();
 stage.classList.add("bodies-on");
 
 startBtn.addEventListener("click", start);
@@ -842,11 +929,17 @@ copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
+bgUrl.addEventListener("focus", resetHeld);
 chatToggleBtn.addEventListener("click", toggleChat);
 consoleToggleBtn.addEventListener("click", toggleConsole);
 avatarToggleBtn.addEventListener("click", toggleAvatar);
 emojiToggleBtn.addEventListener("click", toggleEmojiPanel);
 trailToggleBtn.addEventListener("click", toggleTrail);
+bgToggleBtn.addEventListener("click", toggleBgPanel);
+bgUrlApply.addEventListener("click", applyImageUrl);
+bgUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); applyImageUrl(); } });
+bgFile.addEventListener("change", onBgFile);
+bgReset.addEventListener("click", () => setBackground(""));
 stage.addEventListener("click", onStageClick);
 renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);

@@ -57,6 +57,30 @@
         </div>
       </section>
 
+      <!-- Room background (collapsed by default) -->
+      <section id="bgpanel" class="sidesection collapsed" aria-label="Background">
+        <header class="section-header">
+          <span>Background</span>
+          <button id="bg-toggle" class="ghost" aria-label="Toggle background controls">Show</button>
+        </header>
+        <div class="section-body bg-body">
+          <p class="bg-note">The room background is shared with everyone.</p>
+          <div class="bg-sub">Colours</div>
+          <div id="bg-colors" class="bg-swatches"></div>
+          <div class="bg-sub">Patterns</div>
+          <div id="bg-patterns" class="bg-swatches"></div>
+          <div class="bg-sub">Image</div>
+          <div class="bg-image-row">
+            <input id="bg-url" type="text" placeholder="Paste image URL…" aria-label="Background image URL" />
+            <button id="bg-url-apply" class="ghost">Set</button>
+          </div>
+          <label class="bg-upload ghost">Upload image
+            <input id="bg-file" type="file" accept="image/*" hidden />
+          </label>
+          <button id="bg-reset" class="ghost">Reset to default</button>
+        </div>
+      </section>
+
       <!-- Emoji controls (collapsed by default) -->
       <section id="emojipanel" class="sidesection collapsed" aria-label="Emojis">
         <header class="section-header">
