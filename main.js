@@ -16,6 +16,7 @@ import {
   AVATAR_OPTIONS, SLOT_LABELS, OPTION_LABELS, DEFAULT_AVATAR,
   normalizeAvatar, applyAvatar,
 } from "./avatar.js";
+import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -44,6 +45,13 @@ const avatarSection = document.getElementById("avatarpanel");
 const avatarToggleBtn = document.getElementById("avatar-toggle");
 const avatarList = document.getElementById("avatar-list");
 
+// Emoji elements
+const emojiLayer = document.getElementById("emoji-layer");
+const emojiSection = document.getElementById("emojipanel");
+const emojiToggleBtn = document.getElementById("emoji-toggle");
+const emojiPalette = document.getElementById("emoji-palette");
+const trailToggleBtn = document.getElementById("trail-toggle");
+
 // Dev console elements
 const consoleSection = document.getElementById("devconsole");
 const consoleToggleBtn = document.getElementById("console-toggle");
@@ -66,6 +74,11 @@ const remoteAvatars = new Map();
 
 // Our own avatar configuration (persisted across reloads).
 const avatarConfig = loadAvatar();
+
+// Emoji state: the currently-selected emoji (for throw/trail) and trail on/off.
+const emojiState = loadEmoji();
+let lastTrail = 0;
+const TRAIL_INTERVAL = 130; // ms between trail drops while moving
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -205,6 +218,18 @@ async function start() {
         const cfg = normalizeAvatar(data.config);
         remoteAvatars.set(id, cfg);
         applyAvatar(ensureRemoteTile(id).el, cfg);
+      } else if (data.type === "emoji") {
+        const emoji = typeof data.emoji === "string" ? data.emoji.slice(0, 8) : "";
+        if (!emoji) return;
+        const c = remoteCenter(id);
+        if (data.action === "shower") {
+          spawnShower(emojiLayer, emoji, c.x, c.y);
+        } else if (data.action === "trail") {
+          spawnTrail(emojiLayer, emoji, c.x, c.y);
+        } else if (data.action === "throw") {
+          spawnThrow(emojiLayer, emoji, c.x, c.y,
+            clamp01(data.nx) * stage.clientWidth, clamp01(data.ny) * stage.clientHeight);
+        }
       }
     },
   });
@@ -458,6 +483,13 @@ function loop(timestamp) {
       broadcastPosition();
       lastPosSent = timestamp;
     }
+    // Drop an emoji trail behind us if it's enabled.
+    if (emojiState.trail && timestamp - lastTrail >= TRAIL_INTERVAL) {
+      lastTrail = timestamp;
+      const c = localCenter();
+      spawnTrail(emojiLayer, emojiState.selected, c.x - dx * 26, c.y - dy * 26);
+      if (session) session.broadcast({ type: "emoji", action: "trail", emoji: emojiState.selected });
+    }
     wasMoving = true;
   } else if (wasMoving) {
     // Send one final update so peers see the exact resting position.
@@ -489,6 +521,15 @@ function onKeyDown(e) {
     expandChat();
     chatInput.focus();
     e.preventDefault();
+    return;
+  }
+  // Number keys 1–9 shower the bound emoji around you.
+  if (e.key >= "1" && e.key <= "9" && running) {
+    const emoji = EMOJIS[Number(e.key) - 1];
+    if (emoji) {
+      showerEmoji(emoji);
+      e.preventDefault();
+    }
     return;
   }
   const dir = KEY_MAP[e.key];
@@ -627,6 +668,99 @@ function selectAvatar(slot, val) {
   broadcastAvatar();
 }
 
+// ---- Emojis ----
+
+function loadEmoji() {
+  try {
+    const s = JSON.parse(localStorage.getItem("funmeets-emoji")) || {};
+    return { selected: EMOJIS.includes(s.selected) ? s.selected : EMOJIS[0], trail: !!s.trail };
+  } catch (_) {
+    return { selected: EMOJIS[0], trail: false };
+  }
+}
+
+function saveEmoji() {
+  try {
+    localStorage.setItem("funmeets-emoji", JSON.stringify(emojiState));
+  } catch (_) {}
+}
+
+// Centre of our own avatar, in stage pixels.
+function localCenter() {
+  const ts = tileSize();
+  return { x: pos.x + ts / 2, y: pos.y + ts / 2 };
+}
+
+// Centre of a remote avatar, from its last known normalized position.
+function remoteCenter(id) {
+  const ts = tileSize();
+  const p = remotePositions.get(id);
+  if (p) {
+    const { mx, my } = movableArea();
+    return { x: p.nx * mx + ts / 2, y: p.ny * my + ts / 2 };
+  }
+  const tile = remoteTiles.get(id);
+  const m = tile && /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(tile.el.style.transform || "");
+  if (m) return { x: parseFloat(m[1]) + ts / 2, y: parseFloat(m[2]) + ts / 2 };
+  return { x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
+}
+
+function showerEmoji(emoji) {
+  const c = localCenter();
+  spawnShower(emojiLayer, emoji, c.x, c.y);
+  if (session) session.broadcast({ type: "emoji", action: "shower", emoji });
+}
+
+function throwEmoji(tx, ty) {
+  const c = localCenter();
+  const emoji = emojiState.selected;
+  spawnThrow(emojiLayer, emoji, c.x, c.y, tx, ty);
+  if (session) {
+    session.broadcast({
+      type: "emoji", action: "throw", emoji,
+      nx: tx / stage.clientWidth, ny: ty / stage.clientHeight,
+    });
+  }
+}
+
+function buildEmojiUI() {
+  EMOJIS.forEach((emoji, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "emoji-opt" + (emojiState.selected === emoji ? " active" : "");
+    btn.dataset.emoji = emoji;
+    btn.innerHTML = `<span class="ec">${emoji}</span>` + (i < 9 ? `<span class="ek">${i + 1}</span>` : "");
+    btn.addEventListener("click", () => selectEmoji(emoji));
+    emojiPalette.appendChild(btn);
+  });
+  updateTrailBtn();
+}
+
+function selectEmoji(emoji) {
+  emojiState.selected = emoji;
+  saveEmoji();
+  emojiPalette
+    .querySelectorAll(".emoji-opt")
+    .forEach((b) => b.classList.toggle("active", b.dataset.emoji === emoji));
+}
+
+function toggleTrail() {
+  emojiState.trail = !emojiState.trail;
+  saveEmoji();
+  updateTrailBtn();
+}
+
+function updateTrailBtn() {
+  trailToggleBtn.textContent = "Trail: " + (emojiState.trail ? "On" : "Off");
+  trailToggleBtn.classList.toggle("active", emojiState.trail);
+}
+
+function toggleEmojiPanel() {
+  const collapsed = !emojiSection.classList.contains("collapsed");
+  emojiSection.classList.toggle("collapsed", collapsed);
+  emojiToggleBtn.textContent = collapsed ? "Show" : "Hide";
+}
+
 // ---- Dev console ----
 
 function appendConsoleLog(line) {
@@ -689,9 +823,18 @@ function toggleBodies() {
   toggleBodyBtn.textContent = on ? "Hide bodies" : "Show bodies";
 }
 
+// Throw the selected emoji from your avatar toward where you click the stage.
+function onStageClick(e) {
+  if (!running) return;
+  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, button, input, a")) return;
+  const rect = stage.getBoundingClientRect();
+  throwEmoji(e.clientX - rect.left, e.clientY - rect.top);
+}
+
 // Give the local tile its avatar and turn bodies on by default.
 applyAvatar(selfTile, avatarConfig);
 buildAvatarUI();
+buildEmojiUI();
 stage.classList.add("bodies-on");
 
 startBtn.addEventListener("click", start);
@@ -702,6 +845,9 @@ chatInput.addEventListener("focus", resetHeld);
 chatToggleBtn.addEventListener("click", toggleChat);
 consoleToggleBtn.addEventListener("click", toggleConsole);
 avatarToggleBtn.addEventListener("click", toggleAvatar);
+emojiToggleBtn.addEventListener("click", toggleEmojiPanel);
+trailToggleBtn.addEventListener("click", toggleTrail);
+stage.addEventListener("click", onStageClick);
 renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
