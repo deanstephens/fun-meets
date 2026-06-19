@@ -29,8 +29,21 @@
 
     <!-- Remote peer tiles are added here dynamically -->
 
+    <!-- Cards dropped on the board render here -->
+    <div id="card-layer" class="card-layer"></div>
+
     <!-- Emoji particles render here (pointer-events: none) -->
     <div id="emoji-layer" class="emoji-layer"></div>
+
+    <!-- Slash (/) actions menu -->
+    <div id="actions" class="actions" hidden>
+      <div class="actions-input">
+        <span class="actions-slash">/</span>
+        <input id="action-query" type="text" autocomplete="off"
+               placeholder="type to filter actions…" aria-label="Filter actions" />
+      </div>
+      <ul id="action-list" class="action-list"></ul>
+    </div>
 
     <!-- Start / permission overlay -->
     <div id="overlay">

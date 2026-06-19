@@ -110,8 +110,16 @@ The long-term direction is to grow the meeting from "a call you can move your we
   to peers, so everyone sees your centred face. Toggleable, smoothed, and falls
   back to a plain centre-crop if no face is found or the model can't load.
 
+### Milestone 13 — Actions menu + cards ✅
+- Press <kbd>/</kbd> to open an **actions menu**; type to filter the actions by
+  prefix, then run one with Enter or a click. Built on a small action registry
+  so more actions can be added easily.
+- First action **create-card**: drops an editable sticky **card on the board
+  where you're standing**. Cards (and their text) are shared with everyone and
+  sent to new joiners.
+
 ### Future milestones
-- Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
+- More actions; move/delete cards. Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
@@ -125,7 +133,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–12 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, and face auto-framing.
+🚧 Early development. Milestones 1–13 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, and a slash-command actions menu with shared cards.
 
 ## Getting Started
 
