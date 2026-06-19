@@ -50,6 +50,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   as that participant moves around the stage — driven by their position
   updates, so you see everyone else walking too. Toggle with **Hide/Show bodies**.
 
+### Milestone 5 — Chat speech bubbles ✅
+- Press **Enter** to type a message and Enter again to send it; it appears as a
+  speech bubble floating above your head and is broadcast to everyone.
+- Messages from other participants pop up as bubbles above their tiles, and
+  fade after a few seconds.
+- Typing into the chat box never drives your avatar, and movement resumes the
+  moment you send (or press Escape).
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -65,7 +73,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–4 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, and connection-status indicators with optional animated stick-figure bodies.
+🚧 Early development. Milestones 1–5 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, and chat speech bubbles.
 
 ## Getting Started
 

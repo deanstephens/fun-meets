@@ -27,6 +27,10 @@ const roomNameEl = document.getElementById("room-name");
 const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
+const chatForm = document.getElementById("chat");
+const chatInput = document.getElementById("chat-input");
+
+const BUBBLE_MS = 6000; // how long a speech bubble stays up
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -106,6 +110,7 @@ async function start() {
   overlay.hidden = true;
   controls.hidden = false;
   topbar.hidden = false;
+  chatForm.hidden = false;
   startBtn.disabled = false;
   startBtn.textContent = "Enable camera & join";
 
@@ -131,9 +136,10 @@ async function start() {
     onPeerStatus: (id, status) => setRemoteStatus(id, status),
     // A peer just connected — send them where our tile currently is.
     onPeerJoin: (id) => session && session.sendTo(id, posMessage()),
-    // A peer told us where their tile is.
+    // A peer told us where their tile is, or said something.
     onMessage: (id, data) => {
-      if (data && data.type === "pos") {
+      if (!data) return;
+      if (data.type === "pos") {
         const prev = remotePositions.get(id);
         const moved = !prev ||
           Math.abs(prev.nx - data.nx) > 0.001 ||
@@ -141,6 +147,9 @@ async function start() {
         remotePositions.set(id, { nx: data.nx, ny: data.ny });
         applyRemotePosition(id);
         if (moved) markRemoteWalking(id); // animate their body while moving
+      } else if (data.type === "chat" && typeof data.text === "string") {
+        const tile = ensureRemoteTile(id);
+        showBubble(tile.el, data.text.slice(0, 200));
       }
     },
   });
@@ -292,6 +301,27 @@ function addRemoteStream(id, stream) {
   if (tile.el.dataset.status !== "connected") setRemoteStatus(id, "connected");
 }
 
+// Show (or refresh) a speech bubble above a tile's head. Reuses one bubble
+// element per tile; the latest message replaces any current one.
+function showBubble(tileEl, text) {
+  let bubble = tileEl.__bubble;
+  if (!bubble) {
+    bubble = document.createElement("div");
+    bubble.className = "bubble";
+    tileEl.appendChild(bubble);
+    tileEl.__bubble = bubble;
+  }
+  bubble.textContent = text;
+  bubble.classList.add("show");
+  tileEl.classList.add("has-bubble");
+  if (tileEl.__bubbleTimer) clearTimeout(tileEl.__bubbleTimer);
+  tileEl.__bubbleTimer = setTimeout(() => {
+    bubble.classList.remove("show");
+    tileEl.classList.remove("has-bubble");
+    tileEl.__bubbleTimer = null;
+  }, BUBBLE_MS);
+}
+
 // Briefly flag a remote tile as walking so its body animates while it moves.
 function markRemoteWalking(id) {
   const tile = remoteTiles.get(id);
@@ -311,6 +341,7 @@ function removeRemoteTile(id) {
   const t = remoteWalkTimers.get(id);
   if (t) { clearTimeout(t); remoteWalkTimers.delete(id); }
   if (!tile) return;
+  if (tile.el.__bubbleTimer) clearTimeout(tile.el.__bubbleTimer);
   try { tile.video.srcObject = null; } catch (_) {}
   tile.el.remove();
   remoteTiles.delete(id);
@@ -374,7 +405,28 @@ function loop(timestamp) {
   requestAnimationFrame(loop);
 }
 
+function isTyping() {
+  return document.activeElement === chatInput;
+}
+
+// Drop any held movement keys (e.g. when focus moves into the chat box, so the
+// avatar doesn't keep gliding because we never see the keyup).
+function resetHeld() {
+  held.up = held.down = held.left = held.right = false;
+  selfTile.classList.remove("walking");
+}
+
 function onKeyDown(e) {
+  if (isTyping()) {
+    if (e.key === "Escape") chatInput.blur();
+    return; // let the input field handle the keystroke
+  }
+  // Enter focuses the chat box for a quick message.
+  if (e.key === "Enter" && !chatForm.hidden) {
+    chatInput.focus();
+    e.preventDefault();
+    return;
+  }
   const dir = KEY_MAP[e.key];
   if (!dir) return;
   held[dir] = true;
@@ -382,10 +434,21 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
+  if (isTyping()) return;
   const dir = KEY_MAP[e.key];
   if (!dir) return;
   held[dir] = false;
   e.preventDefault();
+}
+
+function sendChat(e) {
+  e.preventDefault();
+  const text = chatInput.value.trim().slice(0, 200);
+  chatInput.value = "";
+  chatInput.blur(); // return control to movement
+  if (!text) return;
+  showBubble(selfTile, text); // show our own bubble locally
+  if (session) session.broadcast({ type: "chat", text });
 }
 
 // Keep the local tile inside the stage when the window is resized, and
@@ -420,6 +483,8 @@ stage.classList.add("bodies-on");
 startBtn.addEventListener("click", start);
 copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
+chatForm.addEventListener("submit", sendChat);
+chatInput.addEventListener("focus", resetHeld);
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
