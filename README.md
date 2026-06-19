@@ -130,8 +130,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   on the spatial audio. The zone you're in is highlighted, zones sync to all
   peers and to new joiners, and a clear-zones action removes them.
 
+### Milestone 16 — Talking indicator ✅
+- A green ring lights up around whoever is speaking — for you and every remote
+  participant. Each audio stream is analysed locally with a WebAudio analyser
+  (no extra bandwidth), with a threshold + hold so it doesn't flicker between
+  words.
+
 ### Future milestones
-- More actions; move/delete cards. Voice-activity indicators, mini-games, screen share, and more (see the open issues).
+- More actions; move/delete cards. Mini-games, screen share, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
@@ -145,7 +151,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–15 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, and huddle/breakout zones.
+🚧 Early development. Milestones 1–16 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, and a talking indicator.
 
 ## Getting Started
 

@@ -22,6 +22,7 @@ import {
 } from "./background.js";
 import { createFaceFramer } from "./faceframe.js";
 import { createSpatialAudio, gainForDistance } from "./spatialaudio.js";
+import { createVoiceActivity } from "./voiceactivity.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -156,6 +157,10 @@ const spatialAudio = createSpatialAudio();
 let spatialOn = loadSpatialPref();
 window.__spatialAudio = spatialAudio; // debug/inspection handle
 
+// Voice-activity detection -> "talking" ring on the speaker's tile.
+const voiceActivity = createVoiceActivity();
+window.__voiceActivity = voiceActivity; // debug/inspection handle
+
 // id -> { el, head, video, veil } for each known remote participant.
 const remoteTiles = new Map();
 // id -> { nx, ny } latest normalized position broadcast by that peer.
@@ -198,6 +203,7 @@ async function start() {
     }
     selfVideo.srcObject = localStream;
     updateFrameBtn();
+    voiceActivity.addStream("self", localStream); // talking indicator for us
   } catch (err) {
     showError(err);
     startBtn.disabled = false;
@@ -522,6 +528,8 @@ function addRemoteStream(id, stream) {
   tile.el.classList.add("has-video"); // hides the veil
   // Route the audio through spatial audio (distance-based volume).
   spatialAudio.addPeer(id, stream, tile.video);
+  // Watch it for voice activity (talking ring).
+  voiceActivity.addStream(id, stream);
   // Media flowing implies a working connection.
   if (tile.el.dataset.status !== "connected") setRemoteStatus(id, "connected");
 }
@@ -563,6 +571,7 @@ function markRemoteWalking(id) {
 function removeRemoteTile(id) {
   const tile = remoteTiles.get(id);
   spatialAudio.removePeer(id);
+  voiceActivity.removeStream(id);
   remotePositions.delete(id);
   remoteAvatars.delete(id);
   const t = remoteWalkTimers.get(id);
@@ -647,6 +656,11 @@ function loop(timestamp) {
   const myZone = zones.size ? zoneContaining(localCenter()) : null;
   if (zones.size) zones.forEach((z) => z.el.classList.toggle("mine", z === myZone));
   spatialAudio.update((id) => peerTargetGain(id, myZone));
+
+  // Voice activity -> "talking" ring on whoever is speaking.
+  voiceActivity.poll(timestamp);
+  selfTile.classList.toggle("talking", voiceActivity.isSpeaking("self"));
+  remoteTiles.forEach((tile, id) => tile.el.classList.toggle("talking", voiceActivity.isSpeaking(id)));
 
   requestAnimationFrame(loop);
 }

@@ -50,6 +50,15 @@ body {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.15);
   z-index: 1; /* sit above the body's shoulders */
+  transition: box-shadow 0.12s ease;
+}
+
+/* Voice-activity: a green ring + glow while the participant is speaking. */
+.tile.talking .head {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(70, 210, 127, 0.95),
+    0 0 18px 5px rgba(70, 210, 127, 0.5);
 }
 
 .head video {
