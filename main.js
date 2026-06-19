@@ -26,6 +26,7 @@ const topbar = document.getElementById("topbar");
 const roomNameEl = document.getElementById("room-name");
 const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
+const toggleBodyBtn = document.getElementById("toggle-body");
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -49,16 +50,38 @@ let running = false;
 let localStream = null;
 let session = null;
 
-// id -> { el, video } for each connected remote participant.
+// id -> { el, head, video, veil } for each known remote participant.
 const remoteTiles = new Map();
 // id -> { nx, ny } latest normalized position broadcast by that peer.
 const remotePositions = new Map();
+// id -> timeout handle that clears a remote tile's "walking" state.
+const remoteWalkTimers = new Map();
 let remoteSlot = 0;
 
 // Position-broadcast throttle.
 let lastPosSent = 0;
 let wasMoving = false;
 const POS_INTERVAL = 50; // ms between position updates while moving (~20Hz)
+
+const STATUS_TEXT = {
+  connecting: "connecting…",
+  failed: "couldn’t connect",
+  connected: "",
+};
+
+// Build a stick-figure body (SVG). The head is the webcam tile above it.
+function makeBody() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "body");
+  svg.setAttribute("viewBox", "0 0 64 80");
+  svg.innerHTML =
+    '<line class="spine" x1="32" y1="2" x2="32" y2="42" />' +
+    '<line class="arm arm-l" x1="32" y1="12" x2="14" y2="32" />' +
+    '<line class="arm arm-r" x1="32" y1="12" x2="50" y2="32" />' +
+    '<line class="leg leg-l" x1="32" y1="42" x2="18" y2="74" />' +
+    '<line class="leg leg-r" x1="32" y1="42" x2="46" y2="74" />';
+  return svg;
+}
 
 async function start() {
   errorEl.hidden = true;
@@ -102,15 +125,22 @@ async function start() {
       if (typeof s.peerCount === "number") peerCountEl.textContent = String(s.peerCount);
       if (s.error) console.warn("[mesh] status error:", s.error);
     },
-    onPeerStream: (id, stream) => addRemoteTile(id, stream),
+    onPeerStream: (id, stream) => addRemoteStream(id, stream),
     onPeerLeft: (id) => removeRemoteTile(id),
+    // Per-peer connection status (connecting / connected / failed).
+    onPeerStatus: (id, status) => setRemoteStatus(id, status),
     // A peer just connected — send them where our tile currently is.
     onPeerJoin: (id) => session && session.sendTo(id, posMessage()),
     // A peer told us where their tile is.
     onMessage: (id, data) => {
       if (data && data.type === "pos") {
+        const prev = remotePositions.get(id);
+        const moved = !prev ||
+          Math.abs(prev.nx - data.nx) > 0.001 ||
+          Math.abs(prev.ny - data.ny) > 0.001;
         remotePositions.set(id, { nx: data.nx, ny: data.ny });
         applyRemotePosition(id);
+        if (moved) markRemoteWalking(id); // animate their body while moving
       }
     },
   });
@@ -205,38 +235,81 @@ function placeRemote(el) {
   el.style.transform = `translate(${x}px, ${y}px)`;
 }
 
-function addRemoteTile(id, stream) {
+// Create the tile for a peer if it doesn't exist yet. A tile can appear before
+// any video arrives (while still connecting), so it starts as a placeholder
+// with a status veil and is filled in once the stream is flowing.
+function ensureRemoteTile(id) {
   let tile = remoteTiles.get(id);
-  if (!tile) {
-    const el = document.createElement("div");
-    el.className = "tile remote";
+  if (tile) return tile;
 
-    const video = document.createElement("video");
-    video.autoplay = true;
-    video.playsInline = true;
+  const el = document.createElement("div");
+  el.className = "tile remote";
+  el.dataset.status = "connecting";
 
-    const label = document.createElement("div");
-    label.className = "tile-label";
-    label.textContent = shortId(id);
+  const head = document.createElement("div");
+  head.className = "head";
 
-    el.appendChild(video);
-    el.appendChild(label);
-    stage.appendChild(el);
+  const video = document.createElement("video");
+  video.autoplay = true;
+  video.playsInline = true;
 
-    tile = { el, video };
-    remoteTiles.set(id, tile);
+  const label = document.createElement("div");
+  label.className = "tile-label";
+  label.textContent = shortId(id);
 
-    // Use their reported position if we already have one, otherwise lay the
-    // tile out in the fallback grid until a position update arrives.
-    if (remotePositions.has(id)) applyRemotePosition(id);
-    else placeRemote(el);
-  }
+  const dot = document.createElement("div");
+  dot.className = "status-dot";
+
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.textContent = STATUS_TEXT.connecting;
+
+  head.append(video, label, dot, veil);
+  el.appendChild(head);
+  el.appendChild(makeBody());
+  stage.appendChild(el);
+
+  tile = { el, head, video, veil };
+  remoteTiles.set(id, tile);
+
+  // Use their reported position if we have one, otherwise the fallback grid.
+  if (remotePositions.has(id)) applyRemotePosition(id);
+  else placeRemote(el);
+  return tile;
+}
+
+function setRemoteStatus(id, status) {
+  const tile = ensureRemoteTile(id);
+  tile.el.dataset.status = status;
+  tile.veil.textContent = STATUS_TEXT[status] || "";
+}
+
+function addRemoteStream(id, stream) {
+  const tile = ensureRemoteTile(id);
   tile.video.srcObject = stream;
+  tile.el.classList.add("has-video"); // hides the veil
+  // Media flowing implies a working connection.
+  if (tile.el.dataset.status !== "connected") setRemoteStatus(id, "connected");
+}
+
+// Briefly flag a remote tile as walking so its body animates while it moves.
+function markRemoteWalking(id) {
+  const tile = remoteTiles.get(id);
+  if (!tile) return;
+  tile.el.classList.add("walking");
+  const prev = remoteWalkTimers.get(id);
+  if (prev) clearTimeout(prev);
+  remoteWalkTimers.set(id, setTimeout(() => {
+    tile.el.classList.remove("walking");
+    remoteWalkTimers.delete(id);
+  }, 250));
 }
 
 function removeRemoteTile(id) {
   const tile = remoteTiles.get(id);
   remotePositions.delete(id);
+  const t = remoteWalkTimers.get(id);
+  if (t) { clearTimeout(t); remoteWalkTimers.delete(id); }
   if (!tile) return;
   try { tile.video.srcObject = null; } catch (_) {}
   tile.el.remove();
@@ -272,8 +345,12 @@ function loop(timestamp) {
 
   let dx = (held.right ? 1 : 0) - (held.left ? 1 : 0);
   let dy = (held.down ? 1 : 0) - (held.up ? 1 : 0);
+  const moving = dx !== 0 || dy !== 0;
 
-  if (dx !== 0 || dy !== 0) {
+  // Animate our own stick-figure body while moving.
+  selfTile.classList.toggle("walking", moving);
+
+  if (moving) {
     // Normalize so diagonal movement isn't faster than axis-aligned.
     const len = Math.hypot(dx, dy);
     dx /= len;
@@ -331,8 +408,18 @@ async function copyInviteLink() {
   }
 }
 
+function toggleBodies() {
+  const on = stage.classList.toggle("bodies-on");
+  toggleBodyBtn.textContent = on ? "Hide bodies" : "Show bodies";
+}
+
+// Give the local tile a body and turn bodies on by default.
+selfTile.appendChild(makeBody());
+stage.classList.add("bodies-on");
+
 startBtn.addEventListener("click", start);
 copyLinkBtn.addEventListener("click", copyInviteLink);
+toggleBodyBtn.addEventListener("click", toggleBodies);
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);

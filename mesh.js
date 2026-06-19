@@ -28,7 +28,11 @@ const PEER_OPTS = {
   },
 };
 
-export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage }) {
+// How long to wait for a dialed peer to connect before declaring it failed.
+// Past this with no connection, it's almost always NAT/firewall traversal.
+const DIAL_TIMEOUT_MS = 12000;
+
+export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
   const state = {
@@ -38,10 +42,34 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     connections: new Map(), // peerId -> DataConnection
     connecting: new Set(), // peerIds currently being dialed
     calls: new Map(), // peerId -> MediaConnection
+    everConnected: new Set(), // peerIds whose media ICE reached connected
+    dialTimers: new Map(), // peerId -> dial-timeout handle
     closed: false,
   };
 
   const log = (...a) => console.log("[mesh]", ...a);
+
+  function reportStatus(id, s) {
+    if (onPeerStatus) onPeerStatus(id, s);
+  }
+
+  function armDialTimeout(id) {
+    clearDialTimeout(id);
+    state.dialTimers.set(id, setTimeout(() => {
+      state.dialTimers.delete(id);
+      // Still not connected after the timeout → surface it as failed rather
+      // than leaving the user staring at a silent "connecting" forever.
+      if (!state.everConnected.has(id) && !state.connections.has(id)) {
+        log("dial timeout ->", id);
+        reportStatus(id, "failed");
+      }
+    }, DIAL_TIMEOUT_MS));
+  }
+
+  function clearDialTimeout(id) {
+    const t = state.dialTimers.get(id);
+    if (t) { clearTimeout(t); state.dialTimers.delete(id); }
+  }
 
   function emitStatus(extra) {
     if (!onStatus) return;
@@ -66,6 +94,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     if (!bootstrap && state.myId > id) return;
     state.connecting.add(id);
     log("dial ->", id, bootstrap ? "(bootstrap)" : "");
+    armDialTimeout(id);
     wireData(state.peer.connect(id, { reliable: true }));
   }
 
@@ -77,9 +106,12 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
   }
 
   function wireData(conn) {
+    // The peer now has (or will shortly have) a tile; show it as connecting.
+    reportStatus(conn.peer, "connecting");
     conn.on("open", () => {
       state.connecting.delete(conn.peer);
       state.connections.set(conn.peer, conn);
+      clearDialTimeout(conn.peer);
       log("data open <->", conn.peer);
       // Tell EVERYONE (including the newcomer) the current roster, so existing
       // peers learn about later joiners — not just whoever connects to them.
@@ -116,26 +148,43 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
 
   function wireCall(call) {
     state.calls.set(call.peer, call);
+    watchIce(call);
     call.on("stream", (remoteStream) => {
-      // The underlying RTCPeerConnection exists by now — watch it so an
-      // abruptly-dropped peer (tab crash, network loss) is cleaned up, not
-      // just a graceful leave that closes the connection for us.
-      monitorIce(call.peerConnection, call.peer);
       if (onPeerStream) onPeerStream(call.peer, remoteStream);
     });
     call.on("close", () => dropPeer(call.peer));
     call.on("error", (e) => log("call error", call.peer, e && e.type));
   }
 
-  function monitorIce(pc, id) {
-    if (!pc) return;
-    pc.addEventListener("iceconnectionstatechange", () => {
-      const s = pc.iceConnectionState;
-      if (s === "failed" || s === "closed" || s === "disconnected") {
-        log("ice", s, "->", id);
-        dropPeer(id);
-      }
-    });
+  // Watch the media connection's ICE state to (a) report connection status and
+  // (b) clean up peers that drop. We distinguish "never connected" (likely a
+  // NAT/firewall failure — keep the tile visible as failed) from "was connected
+  // then lost" (the peer left/crashed — remove it).
+  function watchIce(call) {
+    const attach = () => {
+      const pc = call.peerConnection;
+      if (!pc || pc.__funmeetsWatched) return;
+      pc.__funmeetsWatched = true;
+      const handle = () => {
+        const s = pc.iceConnectionState;
+        if (s === "connected" || s === "completed") {
+          state.everConnected.add(call.peer);
+          clearDialTimeout(call.peer);
+          reportStatus(call.peer, "connected");
+        } else if (s === "failed" || s === "closed" || s === "disconnected") {
+          log("ice", s, "->", call.peer);
+          if (state.everConnected.has(call.peer)) {
+            dropPeer(call.peer); // it was up and went away → peer left
+          } else {
+            reportStatus(call.peer, "failed"); // never came up → connection failed
+          }
+        }
+      };
+      pc.addEventListener("iceconnectionstatechange", handle);
+      handle(); // catch a state that may already be set
+    };
+    attach();
+    call.on("stream", attach); // fallback in case peerConnection wasn't ready yet
   }
 
   function dropPeer(id) {
@@ -151,6 +200,8 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       changed = true;
     }
     state.connecting.delete(id);
+    state.everConnected.delete(id);
+    clearDialTimeout(id);
     if (changed) {
       log("peer left", id);
       if (onPeerLeft) onPeerLeft(id);
@@ -244,6 +295,8 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     },
     leave() {
       state.closed = true;
+      state.dialTimers.forEach((t) => clearTimeout(t));
+      state.dialTimers.clear();
       state.calls.forEach((c) => { try { c.close(); } catch (_) {} });
       state.connections.forEach((c) => { try { c.close(); } catch (_) {} });
       try { state.peer && state.peer.destroy(); } catch (_) {}

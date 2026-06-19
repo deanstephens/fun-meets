@@ -42,6 +42,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   between participants whose windows are different sizes.
 - New joiners are sent everyone's current position immediately on connect.
 
+### Milestone 4 — Connection status + animated bodies ✅
+- A per-peer status dot (connecting / connected / failed) on every remote tile,
+  so a connection that can't be established (e.g. a NAT/firewall failure) is
+  shown rather than silently missing.
+- An optional stick-figure body under each webcam that animates a walking gait
+  as that participant moves around the stage — driven by their position
+  updates, so you see everyone else walking too. Toggle with **Hide/Show bodies**.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -57,7 +65,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–3 complete: movable webcams, an N-peer WebRTC mesh, and real-time position sync.
+🚧 Early development. Milestones 1–4 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, and connection-status indicators with optional animated stick-figure bodies.
 
 ## Getting Started
 

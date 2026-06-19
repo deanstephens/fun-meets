@@ -14,12 +14,16 @@
       <span class="dot">·</span>
       <span><strong id="peer-count">0</strong> connected</span>
       <button id="copy-link" class="ghost">Copy invite link</button>
+      <button id="toggle-body" class="ghost">Hide bodies</button>
     </div>
 
-    <!-- Your movable webcam tile -->
+    <!-- Your movable webcam tile (the .head is the webcam; the stick-figure
+         body is appended by JS as a sibling so it isn't clipped). -->
     <div id="self" class="tile" hidden>
-      <video id="self-video" autoplay playsinline muted></video>
-      <div class="tile-label">You</div>
+      <div class="head">
+        <video id="self-video" autoplay playsinline muted></video>
+        <div class="tile-label">You</div>
+      </div>
     </div>
 
     <!-- Remote peer tiles are added here dynamically -->
