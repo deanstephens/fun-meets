@@ -27,16 +27,30 @@ const roomNameEl = document.getElementById("room-name");
 const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
+const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
 const chatInput = document.getElementById("chat-input");
 const chatPanel = document.getElementById("chatpanel");
 const chatLog = document.getElementById("chat-log");
-const chatCollapseBtn = document.getElementById("chat-collapse");
-const chatOpenBtn = document.getElementById("chat-open");
+const chatToggleBtn = document.getElementById("chat-toggle");
 const chatUnreadEl = document.getElementById("chat-unread");
 
+// Dev console elements
+const consoleSection = document.getElementById("devconsole");
+const consoleToggleBtn = document.getElementById("console-toggle");
+const dcMyId = document.getElementById("dc-myid");
+const dcRole = document.getElementById("dc-role");
+const dcRoom = document.getElementById("dc-room");
+const dcCount = document.getElementById("dc-count");
+const dcPeers = document.getElementById("dc-peers");
+const dcLog = document.getElementById("dc-log");
+
 const BUBBLE_MS = 6000; // how long a speech bubble stays up
+const LOG_LIMIT = 200; // max lines kept in the dev console log
 let unreadCount = 0;
+
+// id -> status string, for the dev console connections list.
+const peerStatuses = new Map();
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -116,7 +130,7 @@ async function start() {
   overlay.hidden = true;
   controls.hidden = false;
   topbar.hidden = false;
-  chatPanel.hidden = false;
+  sidebar.hidden = false;
   startBtn.disabled = false;
   startBtn.textContent = "Enable camera & join";
 
@@ -129,17 +143,35 @@ async function start() {
   // Join the mesh room.
   const room = getRoom();
   roomNameEl.textContent = room;
+  dcRoom.textContent = room;
   session = joinRoom({
     room,
     localStream,
     onStatus: (s) => {
-      if (typeof s.peerCount === "number") peerCountEl.textContent = String(s.peerCount);
-      if (s.error) console.warn("[mesh] status error:", s.error);
+      if (typeof s.peerCount === "number") {
+        peerCountEl.textContent = String(s.peerCount);
+        dcCount.textContent = String(s.peerCount);
+      }
+      if (s.myId) dcMyId.textContent = s.myId;
+      if (typeof s.isHost === "boolean") dcRole.textContent = s.isHost ? "host" : "guest";
+      if (s.error) {
+        console.warn("[mesh] status error:", s.error);
+        appendConsoleLog("status error: " + s.error);
+      }
     },
     onPeerStream: (id, stream) => addRemoteStream(id, stream),
-    onPeerLeft: (id) => removeRemoteTile(id),
+    onPeerLeft: (id) => {
+      removeRemoteTile(id);
+      peerStatuses.delete(id);
+      renderConsolePeers();
+    },
     // Per-peer connection status (connecting / connected / failed).
-    onPeerStatus: (id, status) => setRemoteStatus(id, status),
+    onPeerStatus: (id, status) => {
+      setRemoteStatus(id, status);
+      peerStatuses.set(id, status);
+      renderConsolePeers();
+    },
+    onLog: (line) => appendConsoleLog(line),
     // A peer just connected — send them where our tile currently is.
     onPeerJoin: (id) => session && session.sendTo(id, posMessage()),
     // A peer told us where their tile is, or said something.
@@ -442,7 +474,7 @@ function onKeyDown(e) {
     return; // let the input field handle the keystroke
   }
   // Enter focuses the chat box for a quick message (expanding it if collapsed).
-  if (e.key === "Enter" && !chatPanel.hidden) {
+  if (e.key === "Enter" && !sidebar.hidden) {
     expandChat();
     chatInput.focus();
     e.preventDefault();
@@ -491,16 +523,66 @@ function addChatMessage(who, text, isYou) {
   }
 }
 
-function collapseChat() {
-  chatPanel.classList.add("collapsed");
-  chatOpenBtn.hidden = false;
+function clearUnread() {
+  unreadCount = 0;
+  chatUnreadEl.hidden = true;
+}
+
+function setChatCollapsed(collapsed) {
+  chatPanel.classList.toggle("collapsed", collapsed);
+  chatToggleBtn.textContent = collapsed ? "Show" : "Hide";
+  if (!collapsed) clearUnread();
+}
+
+function toggleChat() {
+  setChatCollapsed(!chatPanel.classList.contains("collapsed"));
 }
 
 function expandChat() {
-  chatPanel.classList.remove("collapsed");
-  chatOpenBtn.hidden = true;
-  unreadCount = 0;
-  chatUnreadEl.hidden = true;
+  setChatCollapsed(false);
+}
+
+function toggleConsole() {
+  const collapsed = !consoleSection.classList.contains("collapsed");
+  consoleSection.classList.toggle("collapsed", collapsed);
+  consoleToggleBtn.textContent = collapsed ? "Show" : "Hide";
+}
+
+// ---- Dev console ----
+
+function appendConsoleLog(line) {
+  const div = document.createElement("div");
+  div.className = "ln";
+  div.textContent = line;
+  dcLog.appendChild(div);
+  while (dcLog.childElementCount > LOG_LIMIT) dcLog.removeChild(dcLog.firstChild);
+  dcLog.scrollTop = dcLog.scrollHeight;
+}
+
+function renderConsolePeers() {
+  dcPeers.textContent = "";
+  if (peerStatuses.size === 0) {
+    const empty = document.createElement("div");
+    empty.className = "pstatus";
+    empty.textContent = "(none)";
+    dcPeers.appendChild(empty);
+    return;
+  }
+  for (const [id, status] of peerStatuses) {
+    const row = document.createElement("div");
+    row.className = "dc-peer";
+    row.dataset.status = status;
+    const dot = document.createElement("span");
+    dot.className = "pdot";
+    const pid = document.createElement("span");
+    pid.className = "pid";
+    pid.textContent = shortId(id);
+    const st = document.createElement("span");
+    st.className = "pstatus";
+    st.textContent = status;
+    row.append(dot, pid, st);
+    dcPeers.appendChild(row);
+  }
 }
 
 // Keep the local tile inside the stage when the window is resized, and
@@ -537,8 +619,9 @@ copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
-chatCollapseBtn.addEventListener("click", collapseChat);
-chatOpenBtn.addEventListener("click", expandChat);
+chatToggleBtn.addEventListener("click", toggleChat);
+consoleToggleBtn.addEventListener("click", toggleConsole);
+renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);

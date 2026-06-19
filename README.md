@@ -61,6 +61,12 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - Typing into the chat box never drives your avatar, and movement resumes the
   moment you send (or press Escape).
 
+### Milestone 6 — Developer console ✅
+- A toggleable developer console in the right sidebar, sharing the space with
+  chat but collapsed independently. Shows your connection id and role, the
+  room, the live list of connected peers with their status, and a stream of
+  the mesh log — making connection issues easy to inspect.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -76,7 +82,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–5 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, and chat speech bubbles.
+🚧 Early development. Milestones 1–6 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), and a developer console.
 
 ## Getting Started
 
