@@ -50,11 +50,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   as that participant moves around the stage — driven by their position
   updates, so you see everyone else walking too. Toggle with **Hide/Show bodies**.
 
-### Milestone 5 — Chat speech bubbles ✅
+### Milestone 5 — Chat: speech bubbles + side panel ✅
 - Press **Enter** to type a message and Enter again to send it; it appears as a
   speech bubble floating above your head and is broadcast to everyone.
 - Messages from other participants pop up as bubbles above their tiles, and
   fade after a few seconds.
+- A **persistent, collapsible chat panel** on the right keeps the full message
+  history. Collapse it to a tab (with an unread badge); press Enter to reopen
+  and focus it.
 - Typing into the chat box never drives your avatar, and movement resumes the
   moment you send (or press Escape).
 

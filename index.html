@@ -40,11 +40,23 @@
       </div>
     </div>
 
-    <!-- Chat input, shown once joined (Enter to focus, Enter to send) -->
-    <form id="chat" class="chat" hidden autocomplete="off">
-      <input id="chat-input" type="text" maxlength="200"
-             placeholder="Press Enter to chat…" aria-label="Chat message" />
-    </form>
+    <!-- Persistent, collapsible chat panel (shown once joined) -->
+    <section id="chatpanel" class="chatpanel" hidden aria-label="Chat">
+      <header class="chatpanel-header">
+        <span>Chat</span>
+        <button id="chat-collapse" class="ghost" aria-label="Collapse chat">Hide ›</button>
+      </header>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat" class="chat" autocomplete="off">
+        <input id="chat-input" type="text" maxlength="200"
+               placeholder="Message… (Enter to send)" aria-label="Chat message" />
+      </form>
+    </section>
+
+    <!-- Tab to reopen the chat when collapsed -->
+    <button id="chat-open" class="chat-open" hidden aria-label="Open chat">
+      Chat<span id="chat-unread" class="chat-unread" hidden>0</span>
+    </button>
 
     <!-- Controls hint, shown once joined -->
     <div id="controls" class="controls" hidden>

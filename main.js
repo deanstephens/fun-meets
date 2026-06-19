@@ -29,8 +29,14 @@ const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const chatForm = document.getElementById("chat");
 const chatInput = document.getElementById("chat-input");
+const chatPanel = document.getElementById("chatpanel");
+const chatLog = document.getElementById("chat-log");
+const chatCollapseBtn = document.getElementById("chat-collapse");
+const chatOpenBtn = document.getElementById("chat-open");
+const chatUnreadEl = document.getElementById("chat-unread");
 
 const BUBBLE_MS = 6000; // how long a speech bubble stays up
+let unreadCount = 0;
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -110,7 +116,7 @@ async function start() {
   overlay.hidden = true;
   controls.hidden = false;
   topbar.hidden = false;
-  chatForm.hidden = false;
+  chatPanel.hidden = false;
   startBtn.disabled = false;
   startBtn.textContent = "Enable camera & join";
 
@@ -154,8 +160,10 @@ async function start() {
         applyRemotePosition(id);
         if (moved) markRemoteWalking(id); // animate their body while moving
       } else if (data.type === "chat" && typeof data.text === "string") {
+        const text = data.text.slice(0, 200);
         const tile = ensureRemoteTile(id);
-        showBubble(tile.el, data.text.slice(0, 200));
+        showBubble(tile.el, text);
+        addChatMessage(shortId(id), text, false);
       }
     },
   });
@@ -433,8 +441,9 @@ function onKeyDown(e) {
     if (e.key === "Escape") chatInput.blur();
     return; // let the input field handle the keystroke
   }
-  // Enter focuses the chat box for a quick message.
-  if (e.key === "Enter" && !chatForm.hidden) {
+  // Enter focuses the chat box for a quick message (expanding it if collapsed).
+  if (e.key === "Enter" && !chatPanel.hidden) {
+    expandChat();
     chatInput.focus();
     e.preventDefault();
     return;
@@ -460,7 +469,38 @@ function sendChat(e) {
   chatInput.blur(); // return control to movement
   if (!text) return;
   showBubble(selfTile, text); // show our own bubble locally
+  addChatMessage("You", text, true);
   if (session) session.broadcast({ type: "chat", text });
+}
+
+// ---- Persistent chat panel ----
+
+function addChatMessage(who, text, isYou) {
+  const msg = document.createElement("div");
+  msg.className = "msg" + (isYou ? " you" : "");
+  const w = document.createElement("span");
+  w.className = "who";
+  w.textContent = who;
+  msg.append(w, document.createTextNode(text));
+  chatLog.appendChild(msg);
+  chatLog.scrollTop = chatLog.scrollHeight; // keep the latest in view
+  if (chatPanel.classList.contains("collapsed")) {
+    unreadCount += 1;
+    chatUnreadEl.textContent = String(unreadCount);
+    chatUnreadEl.hidden = false;
+  }
+}
+
+function collapseChat() {
+  chatPanel.classList.add("collapsed");
+  chatOpenBtn.hidden = false;
+}
+
+function expandChat() {
+  chatPanel.classList.remove("collapsed");
+  chatOpenBtn.hidden = true;
+  unreadCount = 0;
+  chatUnreadEl.hidden = true;
 }
 
 // Keep the local tile inside the stage when the window is resized, and
@@ -497,6 +537,8 @@ copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
+chatCollapseBtn.addEventListener("click", collapseChat);
+chatOpenBtn.addEventListener("click", expandChat);
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
