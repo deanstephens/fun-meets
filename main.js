@@ -51,6 +51,12 @@ const avatarSection = document.getElementById("avatarpanel");
 const avatarToggleBtn = document.getElementById("avatar-toggle");
 const avatarList = document.getElementById("avatar-list");
 
+// Actions / cards elements
+const cardLayer = document.getElementById("card-layer");
+const actionsEl = document.getElementById("actions");
+const actionQueryInput = document.getElementById("action-query");
+const actionList = document.getElementById("action-list");
+
 // Emoji elements
 const emojiLayer = document.getElementById("emoji-layer");
 const emojiSection = document.getElementById("emojipanel");
@@ -102,6 +108,10 @@ const avatarConfig = loadAvatar();
 const emojiState = loadEmoji();
 let lastTrail = 0;
 const TRAIL_INTERVAL = 130; // ms between trail drops while moving
+
+// Cards dropped on the shared board: id -> { id, nx, ny, text, el, ta, sendTimer }.
+const cards = new Map();
+const CARD_MAX = 500;
 
 // The room's current background CSS ("" = the stylesheet default). Shared.
 // The host is authoritative: it (re)sends the room background to new joiners,
@@ -243,9 +253,12 @@ async function start() {
       session.sendTo(id, posMessage());
       session.sendTo(id, avatarMessage());
       session.sendTo(id, nameMessage());
-      // Only the host hands out the room background, so a newcomer's default
-      // doesn't overwrite it.
-      if (amHost) session.sendTo(id, { type: "background", css: currentBg });
+      // Only the host hands out shared board state (background + cards), so a
+      // newcomer's empty state doesn't overwrite it.
+      if (amHost) {
+        session.sendTo(id, { type: "background", css: currentBg });
+        cards.forEach((c) => session.sendTo(id, cardMessage(c)));
+      }
     },
     // A peer told us where their tile is, or said something.
     onMessage: (id, data) => {
@@ -290,6 +303,8 @@ async function start() {
         }
       } else if (data.type === "background") {
         applyBackground(sanitizeBg(data.css));
+      } else if (data.type === "card" && data.op === "upsert" && data.card) {
+        upsertCard(data.card, false);
       }
     },
   });
@@ -626,6 +641,12 @@ function onKeyDown(e) {
     if (e.key === "Escape" && document.activeElement) document.activeElement.blur();
     return; // let the input field handle the keystroke
   }
+  // "/" opens the actions menu.
+  if (e.key === "/" && running) {
+    openActions();
+    e.preventDefault();
+    return;
+  }
   // Enter focuses the chat box for a quick message (expanding it if collapsed).
   if (e.key === "Enter" && !sidebar.hidden) {
     expandChat();
@@ -928,6 +949,176 @@ function toggleBgPanel() {
   bgToggleBtn.textContent = collapsed ? "Show" : "Hide";
 }
 
+// ---- Actions (slash menu) ----
+
+const ACTIONS = [
+  {
+    id: "create-card",
+    label: "Create card",
+    description: "Drop an editable card where you're standing",
+    run: createCardAtMe,
+  },
+];
+
+let actionFiltered = [];
+let actionHi = 0;
+
+function openActions() {
+  actionsEl.hidden = false;
+  actionQueryInput.value = "";
+  renderActions("");
+  actionQueryInput.focus();
+}
+
+function closeActions() {
+  if (actionsEl.hidden) return;
+  actionsEl.hidden = true;
+  actionQueryInput.blur();
+  resetHeld();
+}
+
+// Fuzzy subsequence score: query chars must appear in order in text. Returns
+// -Infinity for no match; higher is better (rewards consecutive runs and
+// earlier starts) so results can be ranked.
+function fuzzyScore(q, text) {
+  if (!q) return 0;
+  let score = 0;
+  let ti = 0;
+  let streak = 0;
+  let first = -1;
+  for (const ch of q) {
+    let found = -1;
+    for (let j = ti; j < text.length; j++) {
+      if (text[j] === ch) { found = j; break; }
+    }
+    if (found === -1) return -Infinity;
+    if (first === -1) first = found;
+    streak = found === ti ? streak + 1 : 0;
+    score += 1 + streak * 2;
+    ti = found + 1;
+  }
+  return score - first * 0.1;
+}
+
+function renderActions(raw) {
+  // A stray leading "/" (from the trigger key) is ignored; fuzzy-match the rest.
+  const q = raw.replace(/^\/+/, "").trim().toLowerCase();
+  actionFiltered = ACTIONS
+    .map((a) => ({
+      a,
+      s: Math.max(
+        fuzzyScore(q, a.id.toLowerCase()),
+        fuzzyScore(q, a.label.toLowerCase().replace(/\s+/g, ""))
+      ),
+    }))
+    .filter((x) => x.s > -Infinity)
+    .sort((x, y) => y.s - x.s)
+    .map((x) => x.a);
+  actionHi = 0;
+  actionList.textContent = "";
+  if (!actionFiltered.length) {
+    const li = document.createElement("li");
+    li.className = "action-empty";
+    li.textContent = "No matching actions";
+    actionList.appendChild(li);
+    return;
+  }
+  actionFiltered.forEach((a, i) => {
+    const li = document.createElement("li");
+    li.className = "action-item" + (i === actionHi ? " active" : "");
+    const name = document.createElement("span");
+    name.className = "action-name";
+    name.textContent = a.id;
+    const desc = document.createElement("span");
+    desc.className = "action-desc";
+    desc.textContent = a.description;
+    li.append(name, desc);
+    // mousedown (not click) so the input doesn't blur-close before we run.
+    li.addEventListener("mousedown", (e) => { e.preventDefault(); runAction(a); });
+    actionList.appendChild(li);
+  });
+}
+
+function moveActionHighlight(delta) {
+  if (!actionFiltered.length) return;
+  actionHi = (actionHi + delta + actionFiltered.length) % actionFiltered.length;
+  [...actionList.children].forEach((li, i) => li.classList.toggle("active", i === actionHi));
+}
+
+function runAction(a) {
+  closeActions();
+  if (a && a.run) a.run();
+}
+
+// ---- Cards ----
+
+function cardMessage(c) {
+  return { type: "card", op: "upsert", card: { id: c.id, nx: c.nx, ny: c.ny, text: c.text } };
+}
+
+function broadcastCard(c) {
+  if (c && session) session.broadcast(cardMessage(c));
+}
+
+function createCardAtMe() {
+  const center = localCenter();
+  const card = {
+    id: "c" + Math.random().toString(36).slice(2, 9),
+    nx: clamp01(center.x / stage.clientWidth),
+    ny: clamp01(center.y / stage.clientHeight),
+    text: "",
+  };
+  upsertCard(card, true);
+  broadcastCard(cards.get(card.id));
+}
+
+// Create or update a card from data (local or from a peer). focus=true puts the
+// caret in it (used when you create one yourself).
+function upsertCard(data, focus) {
+  const id = String(data.id || "");
+  if (!id) return;
+  const nx = clamp01(Number(data.nx) || 0);
+  const ny = clamp01(Number(data.ny) || 0);
+  const text = String(data.text == null ? "" : data.text).slice(0, CARD_MAX);
+
+  let card = cards.get(id);
+  if (!card) {
+    const el = document.createElement("div");
+    el.className = "card";
+    const ta = document.createElement("textarea");
+    ta.className = "card-text";
+    ta.maxLength = CARD_MAX;
+    ta.placeholder = "Type…";
+    ta.addEventListener("input", () => onCardInput(id));
+    ta.addEventListener("blur", () => broadcastCard(cards.get(id)));
+    el.appendChild(ta);
+    cardLayer.appendChild(el);
+    card = { id, nx, ny, text, el, ta, sendTimer: null };
+    cards.set(id, card);
+  }
+
+  card.nx = nx;
+  card.ny = ny;
+  card.text = text;
+  // Don't clobber the editor's caret while it's being edited locally.
+  if (document.activeElement !== card.ta && card.ta.value !== text) card.ta.value = text;
+  positionCard(card);
+  if (focus) card.ta.focus();
+}
+
+function onCardInput(id) {
+  const card = cards.get(id);
+  if (!card) return;
+  card.text = card.ta.value.slice(0, CARD_MAX);
+  if (card.sendTimer) clearTimeout(card.sendTimer);
+  card.sendTimer = setTimeout(() => broadcastCard(card), 300);
+}
+
+function positionCard(card) {
+  card.el.style.left = card.nx * stage.clientWidth + "px";
+  card.el.style.top = card.ny * stage.clientHeight + "px";
+}
+
 // ---- Dev console ----
 
 function appendConsoleLog(line) {
@@ -972,6 +1163,7 @@ function onResize() {
   clampPosition();
   applyPosition();
   remoteTiles.forEach((_, id) => applyRemotePosition(id));
+  cards.forEach(positionCard);
 }
 
 async function copyInviteLink() {
@@ -1015,7 +1207,7 @@ function toggleFaceFrame() {
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running) return;
-  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, button, input, a")) return;
+  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, .card, button, input, textarea, a")) return;
   const rect = stage.getBoundingClientRect();
   throwEmoji(e.clientX - rect.left, e.clientY - rect.top);
 }
@@ -1052,6 +1244,16 @@ bgUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDef
 bgFile.addEventListener("change", onBgFile);
 bgReset.addEventListener("click", () => setBackground(""));
 stage.addEventListener("click", onStageClick);
+
+// Actions menu input
+actionQueryInput.addEventListener("input", () => renderActions(actionQueryInput.value));
+actionQueryInput.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { moveActionHighlight(1); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { moveActionHighlight(-1); e.preventDefault(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (actionFiltered[actionHi]) runAction(actionFiltered[actionHi]); }
+  else if (e.key === "Escape") { e.preventDefault(); closeActions(); }
+});
+actionQueryInput.addEventListener("blur", () => closeActions());
 renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);

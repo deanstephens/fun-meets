@@ -236,6 +236,131 @@ body {
   width: 100%;
 }
 
+/* ---- Cards on the board ---- */
+.card-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* gaps pass clicks through to the stage */
+  z-index: 5;
+}
+
+.card {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 172px;
+  min-height: 96px;
+  display: flex;
+  padding: 7px;
+  pointer-events: auto;
+  background: #fff3b0;
+  color: #2a2410;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
+}
+
+.card-text {
+  flex: 1;
+  width: 100%;
+  min-height: 84px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.card-text::placeholder {
+  color: #9a8d4a;
+}
+
+/* ---- Slash (/) actions menu ---- */
+.actions {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 82vw);
+  background: rgba(16, 18, 38, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  z-index: 8; /* above the sidebar */
+  overflow: hidden;
+}
+
+.actions[hidden] {
+  display: none;
+}
+
+.actions-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.actions-slash {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.actions-input input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 15px;
+}
+
+.actions-input input::placeholder {
+  color: #9a9cc0;
+}
+
+.action-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.action-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.action-item.active,
+.action-item:hover {
+  background: rgba(108, 123, 255, 0.25);
+}
+
+.action-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.action-desc {
+  font-size: 12px;
+  color: #9a9cc0;
+}
+
+.action-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: #9a9cc0;
+  text-align: center;
+}
+
 /* ---- Emoji particles ---- */
 .emoji-layer {
   position: absolute;
