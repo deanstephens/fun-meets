@@ -45,7 +45,7 @@ body {
 .head {
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: 50%; /* circular "face" */
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.15);
@@ -70,26 +70,33 @@ body {
   border-color: rgba(108, 123, 255, 0.45);
 }
 
+/* Label sits as a centered pill near the bottom of the circular face. It
+   lives on the unclipped .tile wrapper so it isn't cut off by the circle. */
 .tile-label {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
   padding: 2px 8px;
   font-size: 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.55);
+  z-index: 2;
+  pointer-events: none;
 }
 
-/* Per-peer connection status indicator */
+/* Per-peer connection status indicator, placed on the circle's upper-right
+   edge (also on the unclipped wrapper). */
 .status-dot {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 11px;
-  height: 11px;
+  top: 11%;
+  right: 11%;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #888;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
+  z-index: 2;
 }
 
 .tile[data-status="connecting"] .status-dot {

@@ -273,9 +273,10 @@ function ensureRemoteTile(id) {
   veil.className = "veil";
   veil.textContent = STATUS_TEXT.connecting;
 
-  head.append(video, label, dot, veil);
-  el.appendChild(head);
-  el.appendChild(makeBody());
+  // Video + veil are clipped inside the circular head; label + status dot live
+  // on the unclipped wrapper so they aren't cut off by the circle.
+  head.append(video, veil);
+  el.append(head, label, dot, makeBody());
   stage.appendChild(el);
 
   tile = { el, head, video, veil };
