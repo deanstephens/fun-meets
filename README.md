@@ -82,6 +82,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - Pick the throw/trail emoji from a palette in a toggleable Emojis sidebar
   section; choices persist across reloads.
 
+### Milestone 9 — Room background ✅
+- Change the shared room background from a toggleable Background sidebar
+  section: preset **colours**, **patterns** (dots/grid/stripes/checker), an
+  **image URL**, or an **uploaded image** (downscaled in-browser).
+- The background is room-shared — changes broadcast to everyone, and the host
+  hands the current background to new joiners so they match.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -97,7 +104,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–8 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation, and emoji effects.
+🚧 Early development. Milestones 1–9 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation, emoji effects, and a configurable room background.
 
 ## Getting Started
 
