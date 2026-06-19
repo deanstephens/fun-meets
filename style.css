@@ -236,6 +236,45 @@ body {
   width: 100%;
 }
 
+/* ---- Huddle / breakout zones ---- */
+.zone-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0; /* behind avatars */
+}
+
+.zone {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px dashed rgba(108, 123, 255, 0.5);
+  background: radial-gradient(circle, rgba(108, 123, 255, 0.16), rgba(108, 123, 255, 0.05) 70%, transparent);
+}
+
+/* The zone the local user is currently inside gets a brighter ring. */
+.zone.mine {
+  border-color: rgba(120, 220, 160, 0.85);
+  border-style: solid;
+  background: radial-gradient(circle, rgba(70, 210, 127, 0.18), rgba(70, 210, 127, 0.06) 70%, transparent);
+}
+
+.zone-label {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #cfd2f0;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+}
+
+.zone.mine .zone-label {
+  color: #d6ffe6;
+}
+
 /* ---- Cards on the board ---- */
 .card-layer {
   position: absolute;
