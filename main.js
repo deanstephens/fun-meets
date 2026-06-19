@@ -12,6 +12,10 @@
 // milestone, so remote tiles are not yet movable.
 
 import { joinRoom } from "./mesh.js";
+import {
+  AVATAR_OPTIONS, SLOT_LABELS, OPTION_LABELS, DEFAULT_AVATAR,
+  normalizeAvatar, applyAvatar,
+} from "./avatar.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -35,6 +39,11 @@ const chatLog = document.getElementById("chat-log");
 const chatToggleBtn = document.getElementById("chat-toggle");
 const chatUnreadEl = document.getElementById("chat-unread");
 
+// Avatar customisation elements
+const avatarSection = document.getElementById("avatarpanel");
+const avatarToggleBtn = document.getElementById("avatar-toggle");
+const avatarList = document.getElementById("avatar-list");
+
 // Dev console elements
 const consoleSection = document.getElementById("devconsole");
 const consoleToggleBtn = document.getElementById("console-toggle");
@@ -51,6 +60,12 @@ let unreadCount = 0;
 
 // id -> status string, for the dev console connections list.
 const peerStatuses = new Map();
+
+// id -> avatar config for each remote participant.
+const remoteAvatars = new Map();
+
+// Our own avatar configuration (persisted across reloads).
+const avatarConfig = loadAvatar();
 
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
@@ -92,20 +107,6 @@ const STATUS_TEXT = {
   failed: "couldn’t connect",
   connected: "",
 };
-
-// Build a stick-figure body (SVG). The head is the webcam tile above it.
-function makeBody() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "body");
-  svg.setAttribute("viewBox", "0 0 64 80");
-  svg.innerHTML =
-    '<line class="spine" x1="32" y1="2" x2="32" y2="42" />' +
-    '<line class="arm arm-l" x1="32" y1="12" x2="14" y2="32" />' +
-    '<line class="arm arm-r" x1="32" y1="12" x2="50" y2="32" />' +
-    '<line class="leg leg-l" x1="32" y1="42" x2="18" y2="74" />' +
-    '<line class="leg leg-r" x1="32" y1="42" x2="46" y2="74" />';
-  return svg;
-}
 
 async function start() {
   errorEl.hidden = true;
@@ -172,8 +173,12 @@ async function start() {
       renderConsolePeers();
     },
     onLog: (line) => appendConsoleLog(line),
-    // A peer just connected — send them where our tile currently is.
-    onPeerJoin: (id) => session && session.sendTo(id, posMessage()),
+    // A peer just connected — send them our current position and look.
+    onPeerJoin: (id) => {
+      if (!session) return;
+      session.sendTo(id, posMessage());
+      session.sendTo(id, avatarMessage());
+    },
     // A peer told us where their tile is, or said something.
     onMessage: (id, data) => {
       if (!data) return;
@@ -196,6 +201,10 @@ async function start() {
         const tile = ensureRemoteTile(id);
         showBubble(tile.el, text);
         addChatMessage(shortId(id), text, false);
+      } else if (data.type === "avatar") {
+        const cfg = normalizeAvatar(data.config);
+        remoteAvatars.set(id, cfg);
+        applyAvatar(ensureRemoteTile(id).el, cfg);
       }
     },
   });
@@ -322,7 +331,8 @@ function ensureRemoteTile(id) {
   // Video + veil are clipped inside the circular head; label + status dot live
   // on the unclipped wrapper so they aren't cut off by the circle.
   head.append(video, veil);
-  el.append(head, label, dot, makeBody());
+  el.append(head, label, dot);
+  applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
   tile = { el, head, video, veil };
@@ -385,6 +395,7 @@ function markRemoteWalking(id) {
 function removeRemoteTile(id) {
   const tile = remoteTiles.get(id);
   remotePositions.delete(id);
+  remoteAvatars.delete(id);
   const t = remoteWalkTimers.get(id);
   if (t) { clearTimeout(t); remoteWalkTimers.delete(id); }
   if (!tile) return;
@@ -548,6 +559,74 @@ function toggleConsole() {
   consoleToggleBtn.textContent = collapsed ? "Show" : "Hide";
 }
 
+function toggleAvatar() {
+  const collapsed = !avatarSection.classList.contains("collapsed");
+  avatarSection.classList.toggle("collapsed", collapsed);
+  avatarToggleBtn.textContent = collapsed ? "Show" : "Hide";
+}
+
+// ---- Avatar customisation ----
+
+function loadAvatar() {
+  try {
+    return normalizeAvatar(JSON.parse(localStorage.getItem("funmeets-avatar")));
+  } catch (_) {
+    return { ...DEFAULT_AVATAR };
+  }
+}
+
+function saveAvatar() {
+  try {
+    localStorage.setItem("funmeets-avatar", JSON.stringify(avatarConfig));
+  } catch (_) {}
+}
+
+function avatarMessage() {
+  return { type: "avatar", config: avatarConfig };
+}
+
+function broadcastAvatar() {
+  if (session) session.broadcast(avatarMessage());
+}
+
+// Build the customisation controls: one row of option buttons per slot.
+function buildAvatarUI() {
+  Object.keys(AVATAR_OPTIONS).forEach((slot) => {
+    const row = document.createElement("div");
+    row.className = "avatar-row";
+
+    const label = document.createElement("span");
+    label.className = "alabel";
+    label.textContent = SLOT_LABELS[slot];
+
+    const opts = document.createElement("div");
+    opts.className = "opts";
+    AVATAR_OPTIONS[slot].forEach((val) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "opt" + (avatarConfig[slot] === val ? " active" : "");
+      btn.textContent = OPTION_LABELS[val] || val;
+      btn.dataset.slot = slot;
+      btn.dataset.val = val;
+      btn.addEventListener("click", () => selectAvatar(slot, val));
+      opts.appendChild(btn);
+    });
+
+    row.append(label, opts);
+    avatarList.appendChild(row);
+  });
+}
+
+function selectAvatar(slot, val) {
+  avatarConfig[slot] = val;
+  saveAvatar();
+  applyAvatar(selfTile, avatarConfig);
+  avatarList
+    .querySelectorAll('.opt[data-slot="' + slot + '"]')
+    .forEach((b) => b.classList.toggle("active", b.dataset.val === val));
+  broadcastAvatar();
+}
+
 // ---- Dev console ----
 
 function appendConsoleLog(line) {
@@ -610,8 +689,9 @@ function toggleBodies() {
   toggleBodyBtn.textContent = on ? "Hide bodies" : "Show bodies";
 }
 
-// Give the local tile a body and turn bodies on by default.
-selfTile.appendChild(makeBody());
+// Give the local tile its avatar and turn bodies on by default.
+applyAvatar(selfTile, avatarConfig);
+buildAvatarUI();
 stage.classList.add("bodies-on");
 
 startBtn.addEventListener("click", start);
@@ -621,6 +701,7 @@ chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
 chatToggleBtn.addEventListener("click", toggleChat);
 consoleToggleBtn.addEventListener("click", toggleConsole);
+avatarToggleBtn.addEventListener("click", toggleAvatar);
 renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);

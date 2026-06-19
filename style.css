@@ -411,13 +411,13 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* ---- Optional stick-figure body ---- */
+/* ---- Configurable avatar body ---- */
 .body {
   position: absolute;
   left: 50%;
-  bottom: -74px;
+  bottom: -84px;
   width: 64px;
-  height: 80px;
+  height: 92px;
   transform: translateX(-50%);
   overflow: visible;
   pointer-events: none;
@@ -434,10 +434,104 @@ body {
   stroke-linecap: round;
 }
 
+.body .torso {
+  fill: #5a6cff;
+  stroke: #cdd3ff;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.body .shoe {
+  fill: #23232e;
+  stroke: #000;
+  stroke-width: 1;
+}
+
 .body .arm,
 .body .leg {
   transform-box: fill-box;
   transform-origin: top center; /* shoulder for arms, hip for legs */
+}
+
+/* ---- Hat (sits on top of the head) ---- */
+.hat {
+  position: absolute;
+  left: 50%;
+  top: -20px;
+  width: 92px;
+  height: 55px;
+  transform: translateX(-50%);
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3; /* above the head circle */
+}
+
+.hat-cat .ear {
+  fill: #3a3a46;
+  stroke: #23232e;
+  stroke-width: 2;
+}
+
+.hat-cat .ear-in {
+  fill: #ff9bb0;
+}
+
+.hat-pirate .hatbase,
+.hat-pirate .hatband {
+  fill: #15151c;
+}
+
+.hat-pirate .skull,
+.hat-pirate .bone {
+  fill: #e9e9f2;
+}
+
+/* ---- Avatar customisation panel ---- */
+.avatar-body {
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.avatar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.avatar-row .alabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a8cb0;
+}
+
+.avatar-row .opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.opt {
+  margin: 0;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #dfe1f2;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.opt:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.opt.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 /* Natural gait: each leg swings with the opposite arm. */
