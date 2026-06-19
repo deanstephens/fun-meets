@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fun Meets</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="stage">
+    <!-- Your movable webcam tile -->
+    <div id="self" class="tile" hidden>
+      <video id="self-video" autoplay playsinline muted></video>
+      <div class="tile-label">You</div>
+    </div>
+
+    <!-- Start / permission overlay -->
+    <div id="overlay">
+      <div class="overlay-card">
+        <h1>Fun Meets</h1>
+        <p>A serverless, game-like video meeting space.</p>
+        <p class="hint">Move your webcam around with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>.</p>
+        <button id="start-btn">Enable camera &amp; join</button>
+        <p id="error" class="error" hidden></p>
+      </div>
+    </div>
+
+    <!-- Controls hint, shown once joined -->
+    <div id="controls" class="controls" hidden>
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

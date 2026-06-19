@@ -1,0 +1,159 @@
+:root {
+  --tile-size: 180px;
+  --bg-1: #0f1020;
+  --bg-2: #1b1d3a;
+  --accent: #6c7bff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #fff;
+}
+
+#stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(108, 123, 255, 0.25), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(255, 108, 180, 0.2), transparent 45%),
+    linear-gradient(135deg, var(--bg-1), var(--bg-2));
+  overflow: hidden;
+}
+
+/* A webcam tile that can be moved around the stage */
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  /* Position is driven via transform for smooth, GPU-friendly movement */
+  will-change: transform;
+}
+
+.tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror the local preview like other meeting apps */
+  transform: scaleX(-1);
+  background: #000;
+}
+
+.tile-label {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* Overlay / start screen */
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 20, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+/* The `hidden` attribute must win over the `display: flex` above.
+   An ID selector outranks the UA `[hidden] { display: none }` rule,
+   so re-assert it at matching specificity. */
+#overlay[hidden] {
+  display: none;
+}
+
+.overlay-card {
+  text-align: center;
+  padding: 40px 48px;
+  border-radius: 20px;
+  background: rgba(20, 22, 48, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-width: 420px;
+}
+
+.overlay-card h1 {
+  margin: 0 0 8px;
+  font-size: 34px;
+}
+
+.overlay-card p {
+  margin: 6px 0;
+  color: #c7c9e0;
+}
+
+.hint {
+  margin-top: 16px !important;
+}
+
+button {
+  margin-top: 22px;
+  padding: 12px 22px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.2s ease;
+}
+
+button:hover {
+  background: #818dff;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.error {
+  margin-top: 16px !important;
+  color: #ff8a8a;
+  font-size: 14px;
+}
+
+.controls {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+  z-index: 5;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  margin: 0 2px;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+}
