@@ -32,7 +32,7 @@ const PEER_OPTS = {
 // Past this with no connection, it's almost always NAT/firewall traversal.
 const DIAL_TIMEOUT_MS = 12000;
 
-export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus }) {
+export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
   const state = {
@@ -47,7 +47,12 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     closed: false,
   };
 
-  const log = (...a) => console.log("[mesh]", ...a);
+  const log = (...a) => {
+    console.log("[mesh]", ...a);
+    if (onLog) {
+      onLog(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
+    }
+  };
 
   function reportStatus(id, s) {
     if (onPeerStatus) onPeerStatus(id, s);

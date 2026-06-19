@@ -195,43 +195,73 @@ body {
   z-index: 5;
 }
 
-/* ---- Persistent collapsible chat panel ---- */
-.chatpanel {
+/* ---- Right sidebar: stacked, independently-collapsible sections ---- */
+.sidebar {
   position: absolute;
   top: 0;
   right: 0;
   height: 100%;
   width: 300px;
-  max-width: 80vw;
+  max-width: 82vw;
   display: flex;
   flex-direction: column;
-  background: rgba(12, 14, 32, 0.82);
-  backdrop-filter: blur(6px);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 8px;
+  padding: 8px;
   z-index: 7;
-  transition: transform 0.22s ease;
+  /* transparent gaps let clicks fall through to the stage */
+  pointer-events: none;
 }
 
-.chatpanel.collapsed {
-  transform: translateX(100%);
-}
-
-/* `display: flex` on these would otherwise beat the UA [hidden] rule, so
-   re-assert it (same issue as #overlay). */
-.chatpanel[hidden],
-.chat-open[hidden] {
+.sidebar[hidden] {
   display: none;
 }
 
-.chatpanel-header {
+.sidesection {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(12, 14, 32, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  pointer-events: auto;
+  flex: 1 1 0; /* expanded sections share the space */
+}
+
+/* A collapsed section shrinks to just its header. */
+.sidesection.collapsed {
+  flex: 0 0 auto;
+}
+
+.sidesection.collapsed .section-body {
+  display: none;
+}
+
+.section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 10px 12px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 14px;
 }
 
+.section-header .ghost {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.section-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---- Chat section ---- */
 .chat-log {
   flex: 1;
   min-height: 0;
@@ -257,13 +287,6 @@ body {
 
 .msg.you .who {
   color: #46d27f;
-}
-
-.chat-empty {
-  margin: auto;
-  color: #8a8cb0;
-  font-size: 13px;
-  text-align: center;
 }
 
 .chat {
@@ -293,22 +316,11 @@ body {
   color: #9a9cc0;
 }
 
-/* Reopen tab, shown when the panel is collapsed */
-.chat-open {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 7;
-  margin: 0;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .chat-unread {
+  display: inline-block;
   min-width: 18px;
   height: 18px;
+  margin-left: 8px;
   padding: 0 5px;
   border-radius: 9px;
   background: #ff5a5a;
@@ -317,6 +329,86 @@ body {
   font-weight: 700;
   line-height: 18px;
   text-align: center;
+}
+
+.chat-unread[hidden] {
+  display: none;
+}
+
+/* ---- Dev console section ---- */
+.console-body {
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #c9cce6;
+  gap: 8px;
+}
+
+.console-info div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.console-info .k {
+  color: #8a8cb0;
+}
+
+.console-info span:last-child {
+  word-break: break-all;
+  text-align: right;
+}
+
+.console-sub {
+  margin: 8px 0 2px;
+  color: #8a8cb0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.console-peers {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dc-peer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dc-peer .pdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  flex: none;
+}
+
+.dc-peer[data-status="connecting"] .pdot { background: #f1b24a; }
+.dc-peer[data-status="connected"] .pdot { background: #46d27f; }
+.dc-peer[data-status="failed"] .pdot { background: #ff5a5a; }
+
+.dc-peer .pid { flex: 1; word-break: break-all; }
+.dc-peer .pstatus { color: #8a8cb0; }
+
+.console-log {
+  margin-top: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  color: #9aa6cf;
+}
+
+.console-log .ln {
+  padding: 1px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 /* ---- Optional stick-figure body ---- */
@@ -417,12 +509,11 @@ body {
   color: #9a9cc0;
 }
 
-/* Room status bar */
+/* Room status bar (top-left, clear of the right sidebar) */
 .topbar {
   position: absolute;
   top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 14px;
   display: flex;
   align-items: center;
   gap: 10px;

@@ -40,23 +40,44 @@
       </div>
     </div>
 
-    <!-- Persistent, collapsible chat panel (shown once joined) -->
-    <section id="chatpanel" class="chatpanel" hidden aria-label="Chat">
-      <header class="chatpanel-header">
-        <span>Chat</span>
-        <button id="chat-collapse" class="ghost" aria-label="Collapse chat">Hide ›</button>
-      </header>
-      <div id="chat-log" class="chat-log" aria-live="polite"></div>
-      <form id="chat" class="chat" autocomplete="off">
-        <input id="chat-input" type="text" maxlength="200"
-               placeholder="Message… (Enter to send)" aria-label="Chat message" />
-      </form>
-    </section>
+    <!-- Right sidebar: dev console + chat, each independently collapsible
+         (shown once joined) -->
+    <aside id="sidebar" class="sidebar" hidden>
+      <!-- Developer console (collapsed by default) -->
+      <section id="devconsole" class="sidesection collapsed" aria-label="Developer console">
+        <header class="section-header">
+          <span>Dev Console</span>
+          <button id="console-toggle" class="ghost" aria-label="Toggle dev console">Show</button>
+        </header>
+        <div class="section-body console-body">
+          <div class="console-info">
+            <div><span class="k">You</span><span id="dc-myid">—</span></div>
+            <div><span class="k">Role</span><span id="dc-role">—</span></div>
+            <div><span class="k">Room</span><span id="dc-room">—</span></div>
+            <div><span class="k">Connected</span><span id="dc-count">0</span></div>
+          </div>
+          <div class="console-sub">Connections</div>
+          <div id="dc-peers" class="console-peers"></div>
+          <div class="console-sub">Log</div>
+          <div id="dc-log" class="console-log" aria-live="off"></div>
+        </div>
+      </section>
 
-    <!-- Tab to reopen the chat when collapsed -->
-    <button id="chat-open" class="chat-open" hidden aria-label="Open chat">
-      Chat<span id="chat-unread" class="chat-unread" hidden>0</span>
-    </button>
+      <!-- Chat (expanded by default) -->
+      <section id="chatpanel" class="sidesection" aria-label="Chat">
+        <header class="section-header">
+          <span>Chat<span id="chat-unread" class="chat-unread" hidden>0</span></span>
+          <button id="chat-toggle" class="ghost" aria-label="Toggle chat">Hide</button>
+        </header>
+        <div class="section-body">
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="chat" class="chat" autocomplete="off">
+            <input id="chat-input" type="text" maxlength="200"
+                   placeholder="Message… (Enter to send)" aria-label="Chat message" />
+          </form>
+        </div>
+      </section>
+    </aside>
 
     <!-- Controls hint, shown once joined -->
     <div id="controls" class="controls" hidden>
