@@ -43,6 +43,17 @@
     <!-- Right sidebar: dev console + chat, each independently collapsible
          (shown once joined) -->
     <aside id="sidebar" class="sidebar" hidden>
+      <!-- Avatar customisation (collapsed by default) -->
+      <section id="avatarpanel" class="sidesection collapsed" aria-label="Avatar">
+        <header class="section-header">
+          <span>Avatar</span>
+          <button id="avatar-toggle" class="ghost" aria-label="Toggle avatar customisation">Show</button>
+        </header>
+        <div class="section-body avatar-body">
+          <div id="avatar-list"></div>
+        </div>
+      </section>
+
       <!-- Developer console (collapsed by default) -->
       <section id="devconsole" class="sidesection collapsed" aria-label="Developer console">
         <header class="section-header">

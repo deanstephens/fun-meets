@@ -67,6 +67,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
   room, the live list of connected peers with their status, and a stream of
   the mesh log — making connection issues easy to inspect.
 
+### Milestone 7 — Avatar customisation ✅
+- Customise your avatar from a toggleable sidebar section, with independent
+  slots for **hat**, **body**, **legs** and **feet** (e.g. a pirate hat, cat
+  ears, a round non-stick body, shoes).
+- Your look is broadcast to everyone and shown on your tile for all peers; new
+  joiners receive it on connect. Choices persist across reloads.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -82,7 +89,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–6 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), and a developer console.
+🚧 Early development. Milestones 1–7 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, and avatar customisation.
 
 ## Getting Started
 
