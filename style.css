@@ -583,79 +583,106 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* ---- Configurable avatar body ---- */
-.body {
+/* ---- Avatar figure: stick body + PNG clothing overlays ---- */
+.figure {
   position: absolute;
   left: 50%;
-  bottom: -84px;
-  width: 64px;
-  height: 92px;
-  transform: translateX(-50%);
-  overflow: visible;
+  top: 162px; /* just below the head; tucks the neck under the circle */
+  width: 80px;
+  height: 104px;
+  transform: translateX(-50%) scale(1.3);
+  transform-origin: top center;
   pointer-events: none;
   display: none; /* toggled on via .bodies-on on the stage */
 }
 
-#stage.bodies-on .body {
+#stage.bodies-on .figure {
   display: block;
 }
 
-.body line {
-  stroke: #eef0ff;
-  stroke-width: 4;
-  stroke-linecap: round;
+.figure .limb,
+.figure .torso,
+.figure .stick,
+.figure .cloth,
+.figure .foot {
+  position: absolute;
 }
 
-.body .torso {
-  fill: #5a6cff;
-  stroke: #cdd3ff;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
+.figure .stick {
+  background: #eef0ff;
+  border-radius: 3px;
 }
 
-.body .shoe {
-  fill: #23232e;
-  stroke: #000;
-  stroke-width: 1;
+/* Arms — always stick lines, kept separate from the body so they swing. */
+.figure .arm {
+  top: 13px;
+  width: 5px;
+  height: 25px;
+  transform-origin: top center;
 }
 
-.body .arm,
-.body .leg {
-  transform-box: fill-box;
-  transform-origin: top center; /* shoulder for arms, hip for legs */
+.figure .arm .stick {
+  left: 0;
+  width: 5px;
+  height: 100%;
 }
 
-/* ---- Hat (sits on top of the head) ---- */
-.hat {
+.figure .arm-l { left: 31px; transform: rotate(-17deg); }
+.figure .arm-r { left: 44px; transform: rotate(17deg); }
+
+/* Legs — stick line or a per-leg clothing PNG; each swings at the hip. */
+.figure .leg {
+  top: 45px;
+  width: 7px;
+  height: 46px;
+  transform-origin: top center;
+}
+
+.figure .leg-l { left: 30px; transform: rotate(-9deg); }
+.figure .leg-r { left: 43px; transform: rotate(9deg); }
+
+.figure .leg .stick { left: 1px; width: 6px; height: 100%; }
+
+.figure .leg .cloth {
+  top: 0;
+  left: 50%;
+  height: 100%;
+  width: auto;
+  transform: translateX(-50%);
+}
+
+/* Feet — shoe PNG riding at the bottom of each (swinging) leg. */
+.figure .foot {
+  bottom: -3px;
+  left: 50%;
+  height: 15px;
+  width: auto;
+  transform: translateX(-50%);
+}
+
+.figure .foot-l { transform: translateX(-50%) scaleX(-1); }
+
+/* Torso — bare spine or a clothing PNG hanging from the neck. */
+.figure .torso { top: 6px; left: 50%; width: 0; }
+.figure .torso .spine { left: -2px; top: 0; width: 5px; height: 40px; }
+.figure .torso .cloth {
+  left: 50%;
+  top: 0;
+  width: 50px;
+  height: auto;
+  transform: translateX(-50%);
+}
+
+/* Hat — large PNG resting on top of the head. */
+.hat-img {
   position: absolute;
   left: 50%;
-  top: -20px;
-  width: 92px;
-  height: 55px;
+  top: -30px;
+  width: 152px;
+  height: auto;
   transform: translateX(-50%);
-  overflow: visible;
   pointer-events: none;
   z-index: 3; /* above the head circle */
-}
-
-.hat-cat .ear {
-  fill: #3a3a46;
-  stroke: #23232e;
-  stroke-width: 2;
-}
-
-.hat-cat .ear-in {
-  fill: #ff9bb0;
-}
-
-.hat-pirate .hatbase,
-.hat-pirate .hatband {
-  fill: #15151c;
-}
-
-.hat-pirate .skull,
-.hat-pirate .bone {
-  fill: #e9e9f2;
 }
 
 /* ---- Avatar customisation panel ---- */
@@ -707,24 +734,24 @@ body {
 }
 
 /* Natural gait: each leg swings with the opposite arm. */
-.tile.walking .body .leg-l,
-.tile.walking .body .arm-r {
+.tile.walking .figure .leg-l,
+.tile.walking .figure .arm-r {
   animation: limb-a 0.5s ease-in-out infinite;
 }
 
-.tile.walking .body .leg-r,
-.tile.walking .body .arm-l {
+.tile.walking .figure .leg-r,
+.tile.walking .figure .arm-l {
   animation: limb-b 0.5s ease-in-out infinite;
 }
 
 @keyframes limb-a {
-  0%, 100% { transform: rotate(20deg); }
-  50% { transform: rotate(-20deg); }
+  0%, 100% { transform: rotate(16deg); }
+  50% { transform: rotate(-16deg); }
 }
 
 @keyframes limb-b {
-  0%, 100% { transform: rotate(-20deg); }
-  50% { transform: rotate(20deg); }
+  0%, 100% { transform: rotate(-16deg); }
+  50% { transform: rotate(16deg); }
 }
 
 /* Overlay / start screen */

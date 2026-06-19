@@ -89,6 +89,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - The background is room-shared — changes broadcast to everyone, and the host
   hands the current background to new joiners so they match.
 
+### Milestone 10 — Image-based avatar wardrobe ✅
+- The avatar's clothing now uses pre-made PNG art overlaid on the stick figure:
+  **7 hats**, **13 tops** (casual + fantasy armor), **4 leg styles**, **4 shoes**.
+- Hats are large PNGs (the pirate hat spans most of the head). Tops keep the
+  arms separate so they still swing, and each trouser is split into a left and
+  right leg so the legs swing in the walk cycle. Looks sync to all peers.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -104,7 +111,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–9 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation, emoji effects, and a configurable room background.
+🚧 Early development. Milestones 1–10 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, and a configurable room background.
 
 ## Getting Started
 
