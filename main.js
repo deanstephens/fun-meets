@@ -144,6 +144,12 @@ async function start() {
         const moved = !prev ||
           Math.abs(prev.nx - data.nx) > 0.001 ||
           Math.abs(prev.ny - data.ny) > 0.001;
+        // Flip the remote face to match its horizontal direction of travel.
+        const tile = remoteTiles.get(id);
+        if (tile && prev) {
+          if (data.nx > prev.nx + 0.002) tile.el.classList.remove("facing-left");
+          else if (data.nx < prev.nx - 0.002) tile.el.classList.add("facing-left");
+        }
         remotePositions.set(id, { nx: data.nx, ny: data.ny });
         applyRemotePosition(id);
         if (moved) markRemoteWalking(id); // animate their body while moving
@@ -381,6 +387,11 @@ function loop(timestamp) {
 
   // Animate our own stick-figure body while moving.
   selfTile.classList.toggle("walking", moving);
+
+  // Face the direction of horizontal movement (keep facing when moving purely
+  // vertically or standing still). dx is still the raw -1/0/1 here.
+  if (dx > 0) selfTile.classList.remove("facing-left");
+  else if (dx < 0) selfTile.classList.add("facing-left");
 
   if (moving) {
     // Normalize so diagonal movement isn't faster than axis-aligned.
