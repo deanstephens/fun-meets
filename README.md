@@ -35,8 +35,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - Full mesh supporting an arbitrary number of participants (not just 2).
 - Live audio + video between all peers; automatic cleanup when a peer leaves.
 
+### Milestone 3 — Position sync ✅
+- Each peer broadcasts its tile position over the data channels, so everyone
+  sees where everyone else's webcam is on the stage in real time.
+- Positions are sent as normalized (0–1) coordinates, so they map correctly
+  between participants whose windows are different sizes.
+- New joiners are sent everyone's current position immediately on connect.
+
 ### Future milestones
-- Real-time position sync so everyone sees where everyone else's webcam is on the stage.
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
@@ -51,7 +57,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1 and 2 complete: movable webcams and an N-peer WebRTC mesh.
+🚧 Early development. Milestones 1–3 complete: movable webcams, an N-peer WebRTC mesh, and real-time position sync.
 
 ## Getting Started
 

@@ -51,7 +51,14 @@ let session = null;
 
 // id -> { el, video } for each connected remote participant.
 const remoteTiles = new Map();
+// id -> { nx, ny } latest normalized position broadcast by that peer.
+const remotePositions = new Map();
 let remoteSlot = 0;
+
+// Position-broadcast throttle.
+let lastPosSent = 0;
+let wasMoving = false;
+const POS_INTERVAL = 50; // ms between position updates while moving (~20Hz)
 
 async function start() {
   errorEl.hidden = true;
@@ -97,6 +104,15 @@ async function start() {
     },
     onPeerStream: (id, stream) => addRemoteTile(id, stream),
     onPeerLeft: (id) => removeRemoteTile(id),
+    // A peer just connected — send them where our tile currently is.
+    onPeerJoin: (id) => session && session.sendTo(id, posMessage()),
+    // A peer told us where their tile is.
+    onMessage: (id, data) => {
+      if (data && data.type === "pos") {
+        remotePositions.set(id, { nx: data.nx, ny: data.ny });
+        applyRemotePosition(id);
+      }
+    },
   });
 }
 
@@ -142,6 +158,43 @@ function shortId(id) {
   return id.slice(-4);
 }
 
+// The area the tile's top-left corner can occupy, in stage pixels. Positions
+// are exchanged as fractions of this area so they map correctly between peers
+// whose windows are different sizes.
+function movableArea() {
+  return {
+    mx: Math.max(1, stage.clientWidth - tileSize()),
+    my: Math.max(1, stage.clientHeight - tileSize()),
+  };
+}
+
+function clamp01(v) {
+  return Math.min(1, Math.max(0, v));
+}
+
+function localNorm() {
+  const { mx, my } = movableArea();
+  return { nx: clamp01(pos.x / mx), ny: clamp01(pos.y / my) };
+}
+
+function posMessage() {
+  const n = localNorm();
+  return { type: "pos", nx: n.nx, ny: n.ny };
+}
+
+function broadcastPosition() {
+  if (session) session.broadcast(posMessage());
+}
+
+function applyRemotePosition(id) {
+  const tile = remoteTiles.get(id);
+  const p = remotePositions.get(id);
+  if (!tile || !p) return;
+  const { mx, my } = movableArea();
+  tile.el.style.transform = `translate(${p.nx * mx}px, ${p.ny * my}px)`;
+}
+
+// Fallback layout for a tile we haven't received a position for yet.
 function placeRemote(el) {
   const size = tileSize();
   const gap = 16;
@@ -169,16 +222,21 @@ function addRemoteTile(id, stream) {
     el.appendChild(video);
     el.appendChild(label);
     stage.appendChild(el);
-    placeRemote(el);
 
     tile = { el, video };
     remoteTiles.set(id, tile);
+
+    // Use their reported position if we already have one, otherwise lay the
+    // tile out in the fallback grid until a position update arrives.
+    if (remotePositions.has(id)) applyRemotePosition(id);
+    else placeRemote(el);
   }
   tile.video.srcObject = stream;
 }
 
 function removeRemoteTile(id) {
   const tile = remoteTiles.get(id);
+  remotePositions.delete(id);
   if (!tile) return;
   try { tile.video.srcObject = null; } catch (_) {}
   tile.el.remove();
@@ -224,6 +282,16 @@ function loop(timestamp) {
     pos.y += dy * SPEED * dt;
     clampPosition();
     applyPosition();
+    // Throttle position updates to peers while moving.
+    if (timestamp - lastPosSent >= POS_INTERVAL) {
+      broadcastPosition();
+      lastPosSent = timestamp;
+    }
+    wasMoving = true;
+  } else if (wasMoving) {
+    // Send one final update so peers see the exact resting position.
+    broadcastPosition();
+    wasMoving = false;
   }
 
   requestAnimationFrame(loop);
@@ -243,11 +311,13 @@ function onKeyUp(e) {
   e.preventDefault();
 }
 
-// Keep the local tile inside the stage when the window is resized.
+// Keep the local tile inside the stage when the window is resized, and
+// re-project remote tiles from their normalized positions to new pixel coords.
 function onResize() {
   if (selfTile.hidden) return;
   clampPosition();
   applyPosition();
+  remoteTiles.forEach((_, id) => applyRemotePosition(id));
 }
 
 async function copyInviteLink() {

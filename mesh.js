@@ -28,7 +28,7 @@ const PEER_OPTS = {
   },
 };
 
-export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft }) {
+export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
   const state = {
@@ -88,10 +88,17 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       // Lower id places the media call.
       if (state.myId < conn.peer) placeCall(conn.peer);
       emitStatus();
+      // Let the app push initial state (e.g. our current position) to the
+      // newcomer now that the data channel is open.
+      if (onPeerJoin) onPeerJoin(conn.peer);
     });
     conn.on("data", (msg) => {
-      if (msg && msg.type === "roster" && Array.isArray(msg.peers)) {
+      if (!msg) return;
+      if (msg.type === "roster" && Array.isArray(msg.peers)) {
         msg.peers.forEach((id) => tryConnect(id));
+      } else if (msg.type === "app") {
+        // Application-level payload (position updates, future game state, …).
+        if (onMessage) onMessage(conn.peer, msg.data);
       }
     });
     conn.on("close", () => dropPeer(conn.peer));
@@ -221,6 +228,20 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
   });
 
   return {
+    // Send an application payload to every connected peer.
+    broadcast(data) {
+      const msg = { type: "app", data };
+      state.connections.forEach((c) => {
+        try { if (c.open) c.send(msg); } catch (_) {}
+      });
+    },
+    // Send an application payload to a single peer.
+    sendTo(id, data) {
+      const c = state.connections.get(id);
+      if (c && c.open) {
+        try { c.send({ type: "app", data }); } catch (_) {}
+      }
+    },
     leave() {
       state.closed = true;
       state.calls.forEach((c) => { try { c.close(); } catch (_) {} });
