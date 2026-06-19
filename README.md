@@ -118,8 +118,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   where you're standing**. Cards (and their text) are shared with everyone and
   sent to new joiners.
 
+### Milestone 14 — Proximity-based spatial audio ✅
+- Each remote participant's volume scales with the distance between your avatars
+  on the board — walk up to someone to hear them, drift away and they fade out.
+  Pure client-side WebAudio (a gain node per peer driven by the synced
+  positions); toggleable, with a graceful fallback to full volume.
+
 ### Future milestones
-- More actions; move/delete cards. Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
+- More actions; move/delete cards. Huddle/breakout zones, voice-activity indicators, mini-games, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
@@ -133,7 +139,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–13 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, and a slash-command actions menu with shared cards.
+🚧 Early development. Milestones 1–14 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, and proximity-based spatial audio.
 
 ## Getting Started
 
