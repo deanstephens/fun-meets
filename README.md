@@ -96,6 +96,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
   arms separate so they still swing, and each trouser is split into a left and
   right leg so the legs swing in the walk cycle. Looks sync to all peers.
 
+### Milestone 11 — Usernames ✅
+- Pick a display name on the join screen (pre-filled with a random friendly
+  name, remembered across reloads). It shows on your tile to others, in chat,
+  speech bubbles, and the dev console peer list.
+- The name is shared with the room and sent to new joiners; names are
+  sanitised and length-capped, and treated as untrusted when received.
+
 ### Future milestones
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -111,7 +118,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–10 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, and a configurable room background.
+🚧 Early development. Milestones 1–11 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, and user-chosen display names.
 
 ## Getting Started
 

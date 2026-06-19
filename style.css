@@ -838,6 +838,30 @@ button.ghost:hover {
   background: rgba(108, 123, 255, 0.4);
 }
 
+.username-input {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 11px 14px;
+  font-size: 15px;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.username-input:focus {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.username-input::placeholder {
+  color: #9a9cc0;
+}
+
 button {
   margin-top: 22px;
   padding: 12px 22px;

@@ -29,6 +29,7 @@ const selfVideo = document.getElementById("self-video");
 const overlay = document.getElementById("overlay");
 const controls = document.getElementById("controls");
 const startBtn = document.getElementById("start-btn");
+const usernameInput = document.getElementById("username-input");
 const errorEl = document.getElementById("error");
 const topbar = document.getElementById("topbar");
 const roomNameEl = document.getElementById("room-name");
@@ -84,6 +85,13 @@ const peerStatuses = new Map();
 
 // id -> avatar config for each remote participant.
 const remoteAvatars = new Map();
+
+// id -> chosen display name for each remote participant.
+const remoteNames = new Map();
+
+// Our own display name (persisted across reloads). Initialised in the setup
+// section below, once the name word-lists are defined.
+let username = "";
 
 // Our own avatar configuration (persisted across reloads).
 const avatarConfig = loadAvatar();
@@ -145,6 +153,10 @@ async function start() {
   startBtn.disabled = true;
   startBtn.textContent = "Requesting camera…";
 
+  // Lock in the chosen display name before joining.
+  username = sanitizeName(usernameInput.value) || username;
+  saveUsername();
+
   try {
     localStream = await getStream();
     selfVideo.srcObject = localStream;
@@ -199,6 +211,7 @@ async function start() {
     onPeerLeft: (id) => {
       removeRemoteTile(id);
       peerStatuses.delete(id);
+      remoteNames.delete(id);
       renderConsolePeers();
     },
     // Per-peer connection status (connecting / connected / failed).
@@ -214,6 +227,7 @@ async function start() {
       if (!session) return;
       session.sendTo(id, posMessage());
       session.sendTo(id, avatarMessage());
+      session.sendTo(id, nameMessage());
       // Only the host hands out the room background, so a newcomer's default
       // doesn't overwrite it.
       if (amHost) session.sendTo(id, { type: "background", css: currentBg });
@@ -239,7 +253,10 @@ async function start() {
         const text = data.text.slice(0, 200);
         const tile = ensureRemoteTile(id);
         showBubble(tile.el, text);
-        addChatMessage(shortId(id), text, false);
+        addChatMessage(displayName(id), text, false);
+      } else if (data.type === "name") {
+        remoteNames.set(id, sanitizeName(data.name) || shortId(id));
+        applyRemoteName(id);
       } else if (data.type === "avatar") {
         const cfg = normalizeAvatar(data.config);
         remoteAvatars.set(id, cfg);
@@ -297,6 +314,55 @@ function showError(err) {
   }
   errorEl.textContent = msg;
   errorEl.hidden = false;
+}
+
+// ---- Usernames ----------------------------------------------------------
+
+const NAME_ADJ = ["Sunny", "Brave", "Clever", "Lucky", "Swift", "Jolly", "Cosmic", "Mellow", "Witty", "Zippy"];
+const NAME_NOUN = ["Otter", "Fox", "Panda", "Comet", "Maple", "Robin", "Pixel", "Mango", "Heron", "Willow"];
+
+function randomName() {
+  const a = NAME_ADJ[(Math.random() * NAME_ADJ.length) | 0];
+  const n = NAME_NOUN[(Math.random() * NAME_NOUN.length) | 0];
+  return a + n;
+}
+
+// Trim, strip control characters, and cap the length. Returns "" if empty.
+function sanitizeName(s) {
+  if (typeof s !== "string") return "";
+  return s.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 24);
+}
+
+function loadUsername() {
+  try {
+    return sanitizeName(localStorage.getItem("funmeets-username")) || randomName();
+  } catch (_) {
+    return randomName();
+  }
+}
+
+function saveUsername() {
+  try { localStorage.setItem("funmeets-username", username); } catch (_) {}
+}
+
+function nameMessage() {
+  return { type: "name", name: username };
+}
+
+function broadcastName() {
+  if (session) session.broadcast(nameMessage());
+}
+
+// What to show for a peer: their chosen name, falling back to the short id.
+function displayName(id) {
+  return remoteNames.get(id) || shortId(id);
+}
+
+// A peer's name arrived (or changed) — update everywhere it shows.
+function applyRemoteName(id) {
+  const tile = remoteTiles.get(id);
+  if (tile && tile.label) tile.label.textContent = displayName(id);
+  renderConsolePeers();
 }
 
 // ---- Remote tiles -------------------------------------------------------
@@ -372,7 +438,7 @@ function ensureRemoteTile(id) {
 
   const label = document.createElement("div");
   label.className = "tile-label";
-  label.textContent = shortId(id);
+  label.textContent = displayName(id);
 
   const dot = document.createElement("div");
   dot.className = "status-dot";
@@ -388,7 +454,7 @@ function ensureRemoteTile(id) {
   applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
-  tile = { el, head, video, veil };
+  tile = { el, head, video, veil, label };
   remoteTiles.set(id, tile);
 
   // Use their reported position if we have one, otherwise the fallback grid.
@@ -875,7 +941,7 @@ function renderConsolePeers() {
     dot.className = "pdot";
     const pid = document.createElement("span");
     pid.className = "pid";
-    pid.textContent = shortId(id);
+    pid.textContent = displayName(id);
     const st = document.createElement("span");
     st.className = "pstatus";
     st.textContent = status;
@@ -924,7 +990,14 @@ buildEmojiUI();
 buildBgUI();
 stage.classList.add("bodies-on");
 
+// Load the remembered (or a random) name and pre-fill the join screen.
+username = loadUsername();
+usernameInput.value = username;
+
 startBtn.addEventListener("click", start);
+usernameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); start(); }
+});
 copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 chatForm.addEventListener("submit", sendChat);
