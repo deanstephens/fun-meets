@@ -32,7 +32,7 @@ const PEER_OPTS = {
 // Past this with no connection, it's almost always NAT/firewall traversal.
 const DIAL_TIMEOUT_MS = 12000;
 
-export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog }) {
+export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog, onScreenStream, onScreenStop }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
   const state = {
@@ -41,9 +41,11 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     isHost: false,
     connections: new Map(), // peerId -> DataConnection
     connecting: new Set(), // peerIds currently being dialed
-    calls: new Map(), // peerId -> MediaConnection
+    calls: new Map(), // peerId -> MediaConnection (webcam)
     everConnected: new Set(), // peerIds whose media ICE reached connected
     dialTimers: new Map(), // peerId -> dial-timeout handle
+    screenStream: null, // our screen-share stream while sharing
+    screenCalls: new Map(), // peerId -> outgoing screen MediaConnection
     closed: false,
   };
 
@@ -124,6 +126,8 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       broadcastRoster();
       // Lower id places the media call.
       if (state.myId < conn.peer) placeCall(conn.peer);
+      // If we're sharing our screen, send it to the newcomer too.
+      if (state.screenStream) placeScreenCall(conn.peer);
       emitStatus();
       // Let the app push initial state (e.g. our current position) to the
       // newcomer now that the data channel is open.
@@ -149,6 +153,16 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     if (state.closed || state.calls.has(id)) return;
     log("call ->", id);
     wireCall(state.peer.call(id, localStream));
+  }
+
+  // A second, one-way media call carrying our screen-share stream.
+  function placeScreenCall(id) {
+    if (state.closed || !state.screenStream || state.screenCalls.has(id)) return;
+    log("screen ->", id);
+    const call = state.peer.call(id, state.screenStream, { metadata: { kind: "screen" } });
+    state.screenCalls.set(id, call);
+    call.on("close", () => state.screenCalls.delete(id));
+    call.on("error", () => state.screenCalls.delete(id));
   }
 
   function wireCall(call) {
@@ -204,12 +218,18 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       state.connections.delete(id);
       changed = true;
     }
+    if (state.screenCalls.has(id)) {
+      try { state.screenCalls.get(id).close(); } catch (_) {}
+      state.screenCalls.delete(id);
+    }
     state.connecting.delete(id);
     state.everConnected.delete(id);
     clearDialTimeout(id);
     if (changed) {
       log("peer left", id);
       if (onPeerLeft) onPeerLeft(id);
+      // A peer that left can no longer be sharing a screen to us.
+      if (onScreenStop) onScreenStop(id);
       emitStatus();
     }
   }
@@ -217,6 +237,15 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
   function wireCommon() {
     state.peer.on("connection", (conn) => wireData(conn));
     state.peer.on("call", (call) => {
+      if (call.metadata && call.metadata.kind === "screen") {
+        // A one-way screen-share call: answer with no stream, just receive.
+        log("answer screen <-", call.peer);
+        call.answer();
+        call.on("stream", (s) => { if (onScreenStream) onScreenStream(call.peer, s); });
+        call.on("close", () => { if (onScreenStop) onScreenStop(call.peer); });
+        call.on("error", () => { if (onScreenStop) onScreenStop(call.peer); });
+        return;
+      }
       log("answer call <-", call.peer);
       call.answer(localStream);
       wireCall(call);
@@ -298,10 +327,22 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
         try { c.send({ type: "app", data }); } catch (_) {}
       }
     },
+    // Start sharing a screen stream to every connected peer (and future joiners).
+    startScreen(stream) {
+      state.screenStream = stream;
+      state.connections.forEach((_, id) => placeScreenCall(id));
+    },
+    // Stop sharing: close all outgoing screen calls.
+    stopScreen() {
+      state.screenStream = null;
+      state.screenCalls.forEach((c) => { try { c.close(); } catch (_) {} });
+      state.screenCalls.clear();
+    },
     leave() {
       state.closed = true;
       state.dialTimers.forEach((t) => clearTimeout(t));
       state.dialTimers.clear();
+      state.screenCalls.forEach((c) => { try { c.close(); } catch (_) {} });
       state.calls.forEach((c) => { try { c.close(); } catch (_) {} });
       state.connections.forEach((c) => { try { c.close(); } catch (_) {} });
       try { state.peer && state.peer.destroy(); } catch (_) {}
