@@ -1,31 +1,41 @@
-// avatar.js — composable avatar parts for Fun Meets.
+// avatar.js — composable avatar built from PNG clothing assets overlaid on a
+// stick figure.
 //
-// The webcam circle is the "head". Around it we render configurable parts in
-// independent slots so each can be changed on its own:
-//   * hat   — sits on top of the head (none / pirate / cat ears)
-//   * body  — the torso below the head (stick spine / round shirt)
-//   * legs  — stick lines / rounder trousers
-//   * feet  — none / shoes
-// A config is a small object like { hat, body, legs, feet } that is also
-// broadcast to peers so everyone sees each other's look.
+// The webcam circle is the head. Below it a small stick figure is assembled
+// from HTML elements so each limb can swing independently for the walk cycle:
+//   * arms  — always stick lines (kept separate from the body so they swing)
+//   * legs  — stick lines, or a per-leg clothing PNG (jeans/suit/shorts)
+//   * torso — bare spine, or a clothing PNG (tees, hoodie, armor, …)
+//   * feet  — none, or a shoe PNG attached to each (swinging) leg
+//   * hat   — a large PNG resting on top of the head
+//
+// Clothing is supplied as transparent PNGs under assets/avatar/<slot>/.
 
-const NS = "http://www.w3.org/2000/svg";
+const ASSET_BASE = "assets/avatar";
 
 export const AVATAR_OPTIONS = {
-  hat: ["none", "pirate", "cat"],
-  body: ["stick", "round"],
-  legs: ["stick", "round"],
-  feet: ["none", "shoes"],
+  hat: ["none", "pirate", "tophat", "crown", "beanie", "cowboy", "wizard"],
+  body: ["none", "tshirt", "hoodie", "tux", "dress", "striped", "overalls",
+    "steel", "leather", "royal", "tunic", "gi", "knight"],
+  legs: ["none", "jeans", "suit", "shorts"],
+  feet: ["none", "sneaker", "boot", "dressshoe"],
 };
 
 export const SLOT_LABELS = { hat: "Hat", body: "Body", legs: "Legs", feet: "Feet" };
 
 export const OPTION_LABELS = {
-  none: "None", pirate: "Pirate", cat: "Cat ears",
-  stick: "Stick", round: "Round", shoes: "Shoes",
+  none: "None",
+  pirate: "Pirate", tophat: "Top hat", crown: "Crown", beanie: "Beanie",
+  cowboy: "Cowboy", wizard: "Wizard",
+  tshirt: "T-shirt", hoodie: "Hoodie", tux: "Tux", dress: "Dress",
+  striped: "Striped", overalls: "Overalls",
+  steel: "Steel", leather: "Leather", royal: "Royal", tunic: "Tunic",
+  gi: "Gi", knight: "Knight",
+  jeans: "Jeans", suit: "Suit", shorts: "Shorts",
+  sneaker: "Sneaker", boot: "Boot", dressshoe: "Dress shoe",
 };
 
-export const DEFAULT_AVATAR = { hat: "none", body: "stick", legs: "stick", feet: "none" };
+export const DEFAULT_AVATAR = { hat: "none", body: "none", legs: "none", feet: "none" };
 
 // Coerce a possibly-partial or untrusted (peer-supplied) config to safe values.
 export function normalizeAvatar(cfg) {
@@ -38,63 +48,63 @@ export function normalizeAvatar(cfg) {
   return out;
 }
 
-// A leg + optional shoe grouped together so they swing as one while walking.
-function legGroup(side, cfg) {
-  const xHip = 32;
-  const xEnd = side === "l" ? 18 : 46;
-  const yHip = 44;
-  const yFoot = 80;
-  const width = cfg.legs === "round" ? 9 : 4;
-  const leg = `<line class="legline" x1="${xHip}" y1="${yHip}" x2="${xEnd}" y2="${yFoot}" stroke-width="${width}" />`;
-  let shoe = "";
-  if (cfg.feet === "shoes") {
-    const fx = xEnd + (side === "l" ? -3 : 3);
-    shoe = `<ellipse class="shoe" cx="${fx}" cy="${yFoot + 1}" rx="7" ry="4" />`;
-  }
-  return `<g class="leg leg-${side}">${leg}${shoe}</g>`;
+function div(cls) {
+  const d = document.createElement("div");
+  d.className = cls;
+  return d;
 }
 
-export function buildBody(cfg) {
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "body");
-  svg.setAttribute("viewBox", "0 0 64 92");
-  const torso = cfg.body === "round"
-    ? '<path class="torso" d="M21,12 Q32,5 43,12 L41,45 L23,45 Z" />'
-    : '<line class="spine" x1="32" y1="4" x2="32" y2="44" />';
-  svg.innerHTML =
-    torso +
-    '<line class="arm arm-l" x1="32" y1="14" x2="15" y2="33" />' +
-    '<line class="arm arm-r" x1="32" y1="14" x2="49" y2="33" />' +
-    legGroup("l", cfg) +
-    legGroup("r", cfg);
-  return svg;
+function asset(slot, name, cls) {
+  const img = document.createElement("img");
+  img.className = cls;
+  img.src = `${ASSET_BASE}/${slot}/${name}.png`;
+  img.alt = "";
+  img.draggable = false;
+  return img;
+}
+
+function legEl(side, cfg) {
+  const leg = div("limb leg leg-" + side);
+  if (cfg.legs === "none") {
+    leg.appendChild(div("stick"));
+  } else {
+    leg.appendChild(asset("legs", `${cfg.legs}-${side}`, "cloth"));
+  }
+  if (cfg.feet !== "none") {
+    leg.appendChild(asset("feet", cfg.feet, "foot foot-" + side));
+  }
+  return leg;
+}
+
+export function buildFigure(cfg) {
+  const fig = div("figure");
+  // Legs first (behind), then torso, then arms in front.
+  fig.appendChild(legEl("l", cfg));
+  fig.appendChild(legEl("r", cfg));
+
+  const torso = div("torso");
+  if (cfg.body === "none") torso.appendChild(div("spine"));
+  else torso.appendChild(asset("body", cfg.body, "cloth"));
+  fig.appendChild(torso);
+
+  const armL = div("limb arm arm-l");
+  armL.appendChild(div("stick"));
+  const armR = div("limb arm arm-r");
+  armR.appendChild(div("stick"));
+  fig.appendChild(armL);
+  fig.appendChild(armR);
+  return fig;
 }
 
 export function buildHat(type) {
   if (!type || type === "none") return null;
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "hat hat-" + type);
-  svg.setAttribute("viewBox", "0 0 100 60");
-  if (type === "cat") {
-    svg.innerHTML =
-      '<polygon class="ear" points="16,54 26,8 50,42" />' +
-      '<polygon class="ear" points="84,54 74,8 50,42" />' +
-      '<polygon class="ear-in" points="25,46 28,20 41,40" />' +
-      '<polygon class="ear-in" points="75,46 72,20 59,40" />';
-  } else if (type === "pirate") {
-    svg.innerHTML =
-      '<path class="hatbase" d="M6,48 Q50,0 94,48 Q50,32 6,48 Z" />' +
-      '<rect class="hatband" x="12" y="41" width="76" height="10" rx="5" />' +
-      '<circle class="skull" cx="50" cy="41" r="5" />' +
-      '<rect class="bone" x="46" y="46" width="8" height="2.4" rx="1" />';
-  }
-  return svg;
+  return asset("hat", type, "hat-img");
 }
 
-// Replace a tile's avatar parts (body + hat) with ones built from cfg.
+// Replace a tile's avatar parts (figure + hat) with ones built from cfg.
 export function applyAvatar(tileEl, cfg) {
-  tileEl.querySelectorAll(":scope > svg.body, :scope > svg.hat").forEach((n) => n.remove());
-  tileEl.appendChild(buildBody(cfg));
+  tileEl.querySelectorAll(":scope > .figure, :scope > .hat-img").forEach((n) => n.remove());
+  tileEl.appendChild(buildFigure(cfg));
   const hat = buildHat(cfg.hat);
   if (hat) tileEl.appendChild(hat);
 }
