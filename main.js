@@ -1,10 +1,17 @@
-// Fun Meets — Milestone 1
-// Capture the local webcam and let the participant move their own tile
-// around the stage using the WASD keys.
+// Fun Meets — local webcam control + N-peer WebRTC mesh.
 //
-// Movement uses a small physics-free game loop: keys set a velocity, and on
-// every animation frame the tile position is integrated and clamped to the
-// stage. Position is applied via CSS transform for smooth, GPU-friendly motion.
+// Responsibilities here:
+//   * capture the local camera/mic,
+//   * let the participant move their own tile around the stage with WASD,
+//   * join a serverless mesh room (see mesh.js) and render a tile per remote
+//     participant as their media streams arrive.
+//
+// Movement uses a small game loop: keys set a velocity, and on every animation
+// frame the local tile position is integrated and clamped to the stage.
+// Remote tiles are laid out automatically; per-peer position sync is a later
+// milestone, so remote tiles are not yet movable.
+
+import { joinRoom } from "./mesh.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -15,8 +22,12 @@ const overlay = document.getElementById("overlay");
 const controls = document.getElementById("controls");
 const startBtn = document.getElementById("start-btn");
 const errorEl = document.getElementById("error");
+const topbar = document.getElementById("topbar");
+const roomNameEl = document.getElementById("room-name");
+const peerCountEl = document.getElementById("peer-count");
+const copyLinkBtn = document.getElementById("copy-link");
 
-// Tile position (top-left corner, in stage pixels).
+// Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
 
 // Which movement keys are currently held.
@@ -35,6 +46,12 @@ const KEY_MAP = {
 
 let lastFrame = null;
 let running = false;
+let localStream = null;
+let session = null;
+
+// id -> { el, video } for each connected remote participant.
+const remoteTiles = new Map();
+let remoteSlot = 0;
 
 async function start() {
   errorEl.hidden = true;
@@ -42,11 +59,8 @@ async function start() {
   startBtn.textContent = "Requesting camera…";
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: false, // audio is muted in Milestone 1; wired up with WebRTC later
-    });
-    selfVideo.srcObject = stream;
+    localStream = await getStream();
+    selfVideo.srcObject = localStream;
   } catch (err) {
     showError(err);
     startBtn.disabled = false;
@@ -54,13 +68,14 @@ async function start() {
     return;
   }
 
-  // Reveal the tile and center it on the stage.
+  // Reveal the local tile and center it on the stage.
   selfTile.hidden = false;
   centerTile();
   applyPosition();
 
   overlay.hidden = true;
   controls.hidden = false;
+  topbar.hidden = false;
   startBtn.disabled = false;
   startBtn.textContent = "Enable camera & join";
 
@@ -69,12 +84,49 @@ async function start() {
     lastFrame = null;
     requestAnimationFrame(loop);
   }
+
+  // Join the mesh room.
+  const room = getRoom();
+  roomNameEl.textContent = room;
+  session = joinRoom({
+    room,
+    localStream,
+    onStatus: (s) => {
+      if (typeof s.peerCount === "number") peerCountEl.textContent = String(s.peerCount);
+      if (s.error) console.warn("[mesh] status error:", s.error);
+    },
+    onPeerStream: (id, stream) => addRemoteTile(id, stream),
+    onPeerLeft: (id) => removeRemoteTile(id),
+  });
+}
+
+// Prefer camera + mic; fall back to camera-only if no mic is available.
+async function getStream() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (err) {
+    if (err && (err.name === "NotFoundError" || err.name === "OverconstrainedError")) {
+      return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+    throw err;
+  }
+}
+
+function getRoom() {
+  const url = new URL(window.location.href);
+  let room = url.searchParams.get("room");
+  if (!room) {
+    room = Math.random().toString(36).slice(2, 8);
+    url.searchParams.set("room", room);
+    window.history.replaceState(null, "", url);
+  }
+  return room;
 }
 
 function showError(err) {
   let msg = "Could not access the camera.";
   if (err && err.name === "NotAllowedError") {
-    msg = "Camera permission was denied. Allow it and try again.";
+    msg = "Camera/mic permission was denied. Allow it and try again.";
   } else if (err && err.name === "NotFoundError") {
     msg = "No camera was found on this device.";
   } else if (err && err.message) {
@@ -83,6 +135,57 @@ function showError(err) {
   errorEl.textContent = msg;
   errorEl.hidden = false;
 }
+
+// ---- Remote tiles -------------------------------------------------------
+
+function shortId(id) {
+  return id.slice(-4);
+}
+
+function placeRemote(el) {
+  const size = tileSize();
+  const gap = 16;
+  const cols = Math.max(1, Math.floor((stage.clientWidth - gap) / (size + gap)));
+  const idx = remoteSlot++;
+  const x = gap + (idx % cols) * (size + gap);
+  const y = gap + Math.floor(idx / cols) * (size + gap);
+  el.style.transform = `translate(${x}px, ${y}px)`;
+}
+
+function addRemoteTile(id, stream) {
+  let tile = remoteTiles.get(id);
+  if (!tile) {
+    const el = document.createElement("div");
+    el.className = "tile remote";
+
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+
+    const label = document.createElement("div");
+    label.className = "tile-label";
+    label.textContent = shortId(id);
+
+    el.appendChild(video);
+    el.appendChild(label);
+    stage.appendChild(el);
+    placeRemote(el);
+
+    tile = { el, video };
+    remoteTiles.set(id, tile);
+  }
+  tile.video.srcObject = stream;
+}
+
+function removeRemoteTile(id) {
+  const tile = remoteTiles.get(id);
+  if (!tile) return;
+  try { tile.video.srcObject = null; } catch (_) {}
+  tile.el.remove();
+  remoteTiles.delete(id);
+}
+
+// ---- Local tile movement ------------------------------------------------
 
 function tileSize() {
   return selfTile.offsetWidth || 180;
@@ -140,14 +243,27 @@ function onKeyUp(e) {
   e.preventDefault();
 }
 
-// Keep the tile inside the stage when the window is resized.
+// Keep the local tile inside the stage when the window is resized.
 function onResize() {
   if (selfTile.hidden) return;
   clampPosition();
   applyPosition();
 }
 
+async function copyInviteLink() {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    const original = copyLinkBtn.textContent;
+    copyLinkBtn.textContent = "Copied!";
+    setTimeout(() => { copyLinkBtn.textContent = original; }, 1500);
+  } catch (_) {
+    // Clipboard may be unavailable; fall back to selecting nothing silently.
+  }
+}
+
 startBtn.addEventListener("click", start);
+copyLinkBtn.addEventListener("click", copyInviteLink);
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
+window.addEventListener("beforeunload", () => session && session.leave());

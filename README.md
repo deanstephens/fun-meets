@@ -15,32 +15,54 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - **WebRTC peer-to-peer** — audio/video is exchanged directly between participants' browsers using [WebRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API).
 - **Game-like and interactive** — the meeting surface is a playable space, not a fixed grid. This is the feature that will be developed and expanded over time.
 
-> **Note on signaling:** WebRTC requires a signaling step to exchange connection metadata (SDP offers/answers and ICE candidates) before a peer connection is established. Because there is no application server, signaling will be handled without a dedicated backend — for example via manual copy/paste of connection codes, a shareable link, or a serverless/public signaling mechanism. The design goal is to keep the app fully static with no server we operate.
+> **Note on signaling:** WebRTC requires a signaling step to exchange connection metadata (SDP offers/answers and ICE candidates) before a peer connection is established. Because there is no application server we operate, signaling runs over the **public [PeerJS](https://peerjs.com/) cloud broker** — a free third-party service used only to introduce peers. Once connected, all audio/video flows directly peer-to-peer with no relay. This keeps the app fully static (served as plain files) with no backend of our own.
+
+## How it works
+
+- Each participant joins a **room** (identified by a `?room=<name>` URL parameter; one is generated and added to the URL if absent — share that link to invite others).
+- The first participant in a room claims a well-known id derived from the room name and acts as the **entry point**; everyone else bootstraps off it.
+- Peers then exchange rosters and dial each other to form a **full mesh** — every participant holds a direct WebRTC connection to every other participant. This supports **N participants**, not just two.
+- A direct connection per pair carries both audio and video. Peers that drop (leave, crash, or lose the network) are detected via ICE connection state and removed.
 
 ## Roadmap
 
-### Milestone 1 — Movable webcams (initial)
-- Each participant can see their own webcam feed on a shared screen/canvas.
+### Milestone 1 — Movable webcams ✅
+- Each participant sees their own webcam feed on a shared stage.
 - Each participant can **move their own webcam around the screen using the WASD keys**.
-- Peer connections established over WebRTC so participants can see each other.
+
+### Milestone 2 — N-peer WebRTC mesh ✅
+- Participants join a shared room and connect over WebRTC.
+- Full mesh supporting an arbitrary number of participants (not just 2).
+- Live audio + video between all peers; automatic cleanup when a peer leaves.
 
 ### Future milestones
-- Real-time position sync so everyone sees where everyone else is.
+- Real-time position sync so everyone sees where everyone else's webcam is on the stage.
 - Interactive zones and objects on the canvas (e.g. proximity-based audio, breakout areas).
 - Game mechanics and shared activities layered onto the meeting space.
-- Polished signaling/join flow that keeps the app fully serverless.
+- Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
 ## Tech Stack
 
-- Static HTML / CSS / JavaScript (no build server required)
-- WebRTC for peer-to-peer audio/video
-- Browser `getUserMedia` for webcam capture
+- Static HTML / CSS / JavaScript ES modules (no build step)
+- WebRTC for peer-to-peer audio/video, via [PeerJS](https://peerjs.com/) (loaded from a CDN)
+- Public PeerJS cloud broker for signaling only (no backend we operate)
+- Browser `getUserMedia` for webcam + mic capture
 - Keyboard input (WASD) for moving webcams around the canvas
 
 ## Status
 
-🚧 Early development. Starting with Milestone 1.
+🚧 Early development. Milestones 1 and 2 complete: movable webcams and an N-peer WebRTC mesh.
 
 ## Getting Started
 
-> Setup instructions will be added as the project takes shape. Because this is a static app, running it will be as simple as serving the project directory with any static file server and opening it in a WebRTC-capable browser.
+Because this is a static app, just serve the project directory with any static file server and open it in a WebRTC-capable browser:
+
+```bash
+# any static server works; e.g. with Python:
+python3 -m http.server 8000
+# then open http://localhost:8000
+```
+
+Click **Enable camera & join**, then share the URL (it contains a `?room=...` link, also available via the **Copy invite link** button) with others to bring them into the same room. Note that browsers require a **secure context** for camera access — `localhost` is treated as secure, but a hosted deployment must be served over **HTTPS**.
+
+> **Known limitation:** the public PeerJS broker provides STUN but no TURN server, so peers behind strict (symmetric) NATs may fail to connect directly. Adding a TURN server would resolve this but requires infrastructure.

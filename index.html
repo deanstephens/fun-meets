@@ -8,11 +8,21 @@
 </head>
 <body>
   <div id="stage">
+    <!-- Room status bar, shown once joined -->
+    <div id="topbar" class="topbar" hidden>
+      <span class="room">Room <strong id="room-name">—</strong></span>
+      <span class="dot">·</span>
+      <span><strong id="peer-count">0</strong> connected</span>
+      <button id="copy-link" class="ghost">Copy invite link</button>
+    </div>
+
     <!-- Your movable webcam tile -->
     <div id="self" class="tile" hidden>
       <video id="self-video" autoplay playsinline muted></video>
       <div class="tile-label">You</div>
     </div>
+
+    <!-- Remote peer tiles are added here dynamically -->
 
     <!-- Start / permission overlay -->
     <div id="overlay">
@@ -20,6 +30,7 @@
         <h1>Fun Meets</h1>
         <p>A serverless, game-like video meeting space.</p>
         <p class="hint">Move your webcam around with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>.</p>
+        <p class="hint small">Share the room link after joining to invite others.</p>
         <button id="start-btn">Enable camera &amp; join</button>
         <p id="error" class="error" hidden></p>
       </div>
@@ -31,6 +42,8 @@
     </div>
   </div>
 
-  <script src="main.js"></script>
+  <!-- Public PeerJS broker client (signaling only; media is peer-to-peer) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
