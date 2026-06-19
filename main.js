@@ -21,6 +21,7 @@ import {
   COLOR_PRESETS, PATTERN_PRESETS, imageCss, sanitizeBg, downscaleImage,
 } from "./background.js";
 import { createFaceFramer } from "./faceframe.js";
+import { createSpatialAudio } from "./spatialaudio.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -38,6 +39,7 @@ const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
+const toggleSpatialBtn = document.getElementById("toggle-spatial");
 const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
 const chatInput = document.getElementById("chat-input");
@@ -142,6 +144,11 @@ let localStream = null;
 let session = null;
 let faceFramer = null;
 let faceFrameOn = loadFaceFramePref();
+
+// Proximity-based spatial audio (shapes received audio by avatar distance).
+const spatialAudio = createSpatialAudio();
+let spatialOn = loadSpatialPref();
+window.__spatialAudio = spatialAudio; // debug/inspection handle
 
 // id -> { el, head, video, veil } for each known remote participant.
 const remoteTiles = new Map();
@@ -503,6 +510,8 @@ function addRemoteStream(id, stream) {
   const tile = ensureRemoteTile(id);
   tile.video.srcObject = stream;
   tile.el.classList.add("has-video"); // hides the veil
+  // Route the audio through spatial audio (distance-based volume).
+  spatialAudio.addPeer(id, stream, tile.video);
   // Media flowing implies a working connection.
   if (tile.el.dataset.status !== "connected") setRemoteStatus(id, "connected");
 }
@@ -543,6 +552,7 @@ function markRemoteWalking(id) {
 
 function removeRemoteTile(id) {
   const tile = remoteTiles.get(id);
+  spatialAudio.removePeer(id);
   remotePositions.delete(id);
   remoteAvatars.delete(id);
   const t = remoteWalkTimers.get(id);
@@ -620,6 +630,10 @@ function loop(timestamp) {
     broadcastPosition();
     wasMoving = false;
   }
+
+  // Update proximity-audio volumes from current positions (cheap; runs every
+  // frame so it tracks both our movement and peers' movement).
+  spatialAudio.update(localNorm(), (id) => remotePositions.get(id));
 
   requestAnimationFrame(loop);
 }
@@ -1204,6 +1218,28 @@ function toggleFaceFrame() {
   updateFrameBtn();
 }
 
+// ---- Spatial audio ----
+
+function loadSpatialPref() {
+  try {
+    return localStorage.getItem("funmeets-spatial") !== "off";
+  } catch (_) {
+    return true;
+  }
+}
+
+function updateSpatialBtn() {
+  toggleSpatialBtn.textContent = "Spatial audio: " + (spatialOn ? "On" : "Off");
+  toggleSpatialBtn.classList.toggle("active", spatialOn);
+}
+
+function toggleSpatial() {
+  spatialOn = !spatialOn;
+  spatialAudio.setEnabled(spatialOn);
+  try { localStorage.setItem("funmeets-spatial", spatialOn ? "on" : "off"); } catch (_) {}
+  updateSpatialBtn();
+}
+
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running) return;
@@ -1230,6 +1266,9 @@ usernameInput.addEventListener("keydown", (e) => {
 copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
+toggleSpatialBtn.addEventListener("click", toggleSpatial);
+spatialAudio.setEnabled(spatialOn);
+updateSpatialBtn();
 chatForm.addEventListener("submit", sendChat);
 chatInput.addEventListener("focus", resetHeld);
 bgUrl.addEventListener("focus", resetHeld);
