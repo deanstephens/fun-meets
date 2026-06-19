@@ -28,6 +28,9 @@
 
     <!-- Remote peer tiles are added here dynamically -->
 
+    <!-- Emoji particles render here (pointer-events: none) -->
+    <div id="emoji-layer" class="emoji-layer"></div>
+
     <!-- Start / permission overlay -->
     <div id="overlay">
       <div class="overlay-card">
@@ -51,6 +54,22 @@
         </header>
         <div class="section-body avatar-body">
           <div id="avatar-list"></div>
+        </div>
+      </section>
+
+      <!-- Emoji controls (collapsed by default) -->
+      <section id="emojipanel" class="sidesection collapsed" aria-label="Emojis">
+        <header class="section-header">
+          <span>Emojis</span>
+          <button id="emoji-toggle" class="ghost" aria-label="Toggle emoji controls">Show</button>
+        </header>
+        <div class="section-body emoji-body">
+          <p class="emoji-hint">
+            Press <b>1–9</b> to shower &middot; <b>click</b> the stage to throw at the cursor
+            &middot; turn on <b>Trail</b> to leave emoji behind you as you move.
+          </p>
+          <div id="emoji-palette" class="emoji-palette"></div>
+          <button id="trail-toggle" class="ghost emoji-trail-btn">Trail: Off</button>
         </div>
       </section>
 
