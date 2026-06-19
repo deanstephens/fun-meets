@@ -124,8 +124,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   Pure client-side WebAudio (a gain node per peer driven by the synced
   positions); toggleable, with a graceful fallback to full volume.
 
+### Milestone 15 — Huddle / breakout zones ✅
+- Drop a **huddle zone** (an action): people inside a zone hear each other
+  clearly while everyone outside is muffled — serverless breakout rooms layered
+  on the spatial audio. The zone you're in is highlighted, zones sync to all
+  peers and to new joiners, and a clear-zones action removes them.
+
 ### Future milestones
-- More actions; move/delete cards. Huddle/breakout zones, voice-activity indicators, mini-games, and more (see the open issues).
+- More actions; move/delete cards. Voice-activity indicators, mini-games, screen share, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
@@ -139,7 +145,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–14 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, and proximity-based spatial audio.
+🚧 Early development. Milestones 1–15 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, and huddle/breakout zones.
 
 ## Getting Started
 

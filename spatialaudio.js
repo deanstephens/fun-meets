@@ -51,15 +51,13 @@ export function createSpatialAudio() {
     peers.delete(id);
   }
 
-  // Recompute gains from positions. getPeerNorm(id) -> { nx, ny } or null.
-  function update(localNorm, getPeerNorm) {
+  // Recompute gains. targetFor(id) -> desired gain [0..1] (distance + zones,
+  // computed by the caller). When disabled, everyone is full volume.
+  function update(targetFor) {
     if (!ctx) return;
     peers.forEach((p, id) => {
-      let target = 1;
-      if (enabled && localNorm) {
-        const pn = getPeerNorm(id);
-        if (pn) target = gainForDistance(Math.hypot(localNorm.nx - pn.nx, localNorm.ny - pn.ny));
-      }
+      let target = enabled ? targetFor(id) : 1;
+      if (typeof target !== "number") target = 1;
       const g = p.gain.gain;
       g.value += (target - g.value) * 0.25; // smooth toward target (no zipper)
     });

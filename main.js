@@ -21,7 +21,7 @@ import {
   COLOR_PRESETS, PATTERN_PRESETS, imageCss, sanitizeBg, downscaleImage,
 } from "./background.js";
 import { createFaceFramer } from "./faceframe.js";
-import { createSpatialAudio } from "./spatialaudio.js";
+import { createSpatialAudio, gainForDistance } from "./spatialaudio.js";
 
 const SPEED = 420; // pixels per second at full tilt
 
@@ -53,7 +53,8 @@ const avatarSection = document.getElementById("avatarpanel");
 const avatarToggleBtn = document.getElementById("avatar-toggle");
 const avatarList = document.getElementById("avatar-list");
 
-// Actions / cards elements
+// Actions / cards / zones elements
+const zoneLayer = document.getElementById("zone-layer");
 const cardLayer = document.getElementById("card-layer");
 const actionsEl = document.getElementById("actions");
 const actionQueryInput = document.getElementById("action-query");
@@ -114,6 +115,11 @@ const TRAIL_INTERVAL = 130; // ms between trail drops while moving
 // Cards dropped on the shared board: id -> { id, nx, ny, text, el, ta, sendTimer }.
 const cards = new Map();
 const CARD_MAX = 500;
+
+// Huddle/breakout zones: id -> { id, cx, cy, r, el }. People in the same zone
+// hear each other clearly; everyone else is muffled.
+const zones = new Map();
+const ZONE_MUFFLED = 0.08;
 
 // The room's current background CSS ("" = the stylesheet default). Shared.
 // The host is authoritative: it (re)sends the room background to new joiners,
@@ -265,6 +271,7 @@ async function start() {
       if (amHost) {
         session.sendTo(id, { type: "background", css: currentBg });
         cards.forEach((c) => session.sendTo(id, cardMessage(c)));
+        zones.forEach((z) => session.sendTo(id, zoneMessage(z)));
       }
     },
     // A peer told us where their tile is, or said something.
@@ -312,6 +319,9 @@ async function start() {
         applyBackground(sanitizeBg(data.css));
       } else if (data.type === "card" && data.op === "upsert" && data.card) {
         upsertCard(data.card, false);
+      } else if (data.type === "zone") {
+        if (data.op === "upsert" && data.zone) upsertZone(data.zone);
+        else if (data.op === "clear") clearZones(false);
       }
     },
   });
@@ -631,9 +641,12 @@ function loop(timestamp) {
     wasMoving = false;
   }
 
-  // Update proximity-audio volumes from current positions (cheap; runs every
-  // frame so it tracks both our movement and peers' movement).
-  spatialAudio.update(localNorm(), (id) => remotePositions.get(id));
+  // Which huddle zone we're in (highlight it), then update spatial-audio
+  // volumes from positions + zone membership. Cheap; runs every frame so it
+  // tracks our movement and peers' movement.
+  const myZone = zones.size ? zoneContaining(localCenter()) : null;
+  if (zones.size) zones.forEach((z) => z.el.classList.toggle("mine", z === myZone));
+  spatialAudio.update((id) => peerTargetGain(id, myZone));
 
   requestAnimationFrame(loop);
 }
@@ -972,6 +985,18 @@ const ACTIONS = [
     description: "Drop an editable card where you're standing",
     run: createCardAtMe,
   },
+  {
+    id: "create-zone",
+    label: "Create huddle zone",
+    description: "Make a zone — people inside hear each other, muffled to outside",
+    run: createZoneAtMe,
+  },
+  {
+    id: "clear-zones",
+    label: "Clear huddle zones",
+    description: "Remove all huddle zones from the board",
+    run: () => clearZones(true),
+  },
 ];
 
 let actionFiltered = [];
@@ -1133,6 +1158,90 @@ function positionCard(card) {
   card.el.style.top = card.ny * stage.clientHeight + "px";
 }
 
+// ---- Huddle zones ----
+
+function zoneMessage(z) {
+  return { type: "zone", op: "upsert", zone: { id: z.id, cx: z.cx, cy: z.cy, r: z.r } };
+}
+
+function broadcastZone(z) {
+  if (z && session) session.broadcast(zoneMessage(z));
+}
+
+function createZoneAtMe() {
+  const c = localCenter();
+  const zone = {
+    id: "z" + Math.random().toString(36).slice(2, 9),
+    cx: clamp01(c.x / stage.clientWidth),
+    cy: clamp01(c.y / stage.clientHeight),
+    r: 0.18,
+  };
+  upsertZone(zone);
+  broadcastZone(zones.get(zone.id));
+}
+
+function upsertZone(data) {
+  const id = String(data.id || "");
+  if (!id) return;
+  const cx = clamp01(Number(data.cx) || 0);
+  const cy = clamp01(Number(data.cy) || 0);
+  const r = Math.min(0.45, Math.max(0.05, Number(data.r) || 0.18));
+  let z = zones.get(id);
+  if (!z) {
+    const el = document.createElement("div");
+    el.className = "zone";
+    const label = document.createElement("span");
+    label.className = "zone-label";
+    label.textContent = "huddle";
+    el.appendChild(label);
+    zoneLayer.appendChild(el);
+    z = { id, cx, cy, r, el };
+    zones.set(id, z);
+  }
+  z.cx = cx;
+  z.cy = cy;
+  z.r = r;
+  positionZone(z);
+}
+
+function clearZones(broadcast) {
+  zones.forEach((z) => z.el.remove());
+  zones.clear();
+  if (broadcast && session) session.broadcast({ type: "zone", op: "clear" });
+}
+
+function positionZone(z) {
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const rad = z.r * Math.min(W, H);
+  z.el.style.left = z.cx * W + "px";
+  z.el.style.top = z.cy * H + "px";
+  z.el.style.width = z.el.style.height = 2 * rad + "px";
+}
+
+// Which zone (if any) contains a pixel point (an avatar centre).
+function zoneContaining(pt) {
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const ref = Math.min(W, H);
+  for (const z of zones.values()) {
+    if (Math.hypot(pt.x - z.cx * W, pt.y - z.cy * H) <= z.r * ref) return z;
+  }
+  return null;
+}
+
+// Target gain for a peer: zone rules take precedence over distance.
+function peerTargetGain(id, myZone) {
+  const pn = remotePositions.get(id);
+  if (!pn) return 1;
+  if (zones.size) {
+    const theirZone = zoneContaining(remoteCenter(id));
+    if (myZone || theirZone) return myZone && myZone === theirZone ? 1 : ZONE_MUFFLED;
+  }
+  const me = localNorm();
+  return gainForDistance(Math.hypot(me.nx - pn.nx, me.ny - pn.ny));
+}
+
 // ---- Dev console ----
 
 function appendConsoleLog(line) {
@@ -1178,6 +1287,7 @@ function onResize() {
   applyPosition();
   remoteTiles.forEach((_, id) => applyRemotePosition(id));
   cards.forEach(positionCard);
+  zones.forEach(positionZone);
 }
 
 async function copyInviteLink() {
@@ -1287,10 +1397,12 @@ stage.addEventListener("click", onStageClick);
 // Actions menu input
 actionQueryInput.addEventListener("input", () => renderActions(actionQueryInput.value));
 actionQueryInput.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowDown") { moveActionHighlight(1); e.preventDefault(); }
-  else if (e.key === "ArrowUp") { moveActionHighlight(-1); e.preventDefault(); }
-  else if (e.key === "Enter") { e.preventDefault(); if (actionFiltered[actionHi]) runAction(actionFiltered[actionHi]); }
-  else if (e.key === "Escape") { e.preventDefault(); closeActions(); }
+  // stopPropagation so the window keydown handler doesn't also act on these
+  // (e.g. Enter would otherwise focus the chat box after the menu closes).
+  if (e.key === "ArrowDown") { moveActionHighlight(1); e.preventDefault(); e.stopPropagation(); }
+  else if (e.key === "ArrowUp") { moveActionHighlight(-1); e.preventDefault(); e.stopPropagation(); }
+  else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (actionFiltered[actionHi]) runAction(actionFiltered[actionHi]); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeActions(); }
 });
 actionQueryInput.addEventListener("blur", () => closeActions());
 renderConsolePeers(); // show "(none)" until peers connect
