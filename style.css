@@ -775,6 +775,23 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Settings section: room/AV toggles stacked full-width. */
+.settings-body {
+  gap: 8px;
+  padding: 10px;
+}
+
+.settings-body .ghost {
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+
+.settings-body .ghost.active {
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ---- Chat section ---- */
 .chat-log {
   flex: 1;

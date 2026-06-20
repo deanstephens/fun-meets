@@ -53,6 +53,10 @@ const chatLog = document.getElementById("chat-log");
 const chatToggleBtn = document.getElementById("chat-toggle");
 const chatUnreadEl = document.getElementById("chat-unread");
 
+// Settings panel (room/AV toggles)
+const settingsSection = document.getElementById("settingspanel");
+const settingsToggleBtn = document.getElementById("settings-toggle");
+
 // Avatar customisation elements
 const avatarSection = document.getElementById("avatarpanel");
 const avatarToggleBtn = document.getElementById("avatar-toggle");
@@ -822,6 +826,12 @@ function toggleAvatar() {
   const collapsed = !avatarSection.classList.contains("collapsed");
   avatarSection.classList.toggle("collapsed", collapsed);
   avatarToggleBtn.textContent = collapsed ? "Show" : "Hide";
+}
+
+function toggleSettings() {
+  const collapsed = !settingsSection.classList.contains("collapsed");
+  settingsSection.classList.toggle("collapsed", collapsed);
+  settingsToggleBtn.textContent = collapsed ? "Show" : "Hide";
 }
 
 // ---- Avatar customisation ----
@@ -1829,6 +1839,7 @@ chatInput.addEventListener("focus", resetHeld);
 bgUrl.addEventListener("focus", resetHeld);
 chatToggleBtn.addEventListener("click", toggleChat);
 consoleToggleBtn.addEventListener("click", toggleConsole);
+settingsToggleBtn.addEventListener("click", toggleSettings);
 avatarToggleBtn.addEventListener("click", toggleAvatar);
 emojiToggleBtn.addEventListener("click", toggleEmojiPanel);
 trailToggleBtn.addEventListener("click", toggleTrail);

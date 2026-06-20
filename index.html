@@ -17,9 +17,6 @@
       <span class="dot">·</span>
       <span><strong id="peer-count">0</strong> connected</span>
       <button id="copy-link" class="ghost">Copy invite link</button>
-      <button id="toggle-body" class="ghost">Hide bodies</button>
-      <button id="toggle-frame" class="ghost">Auto-frame: On</button>
-      <button id="toggle-spatial" class="ghost">Spatial audio: On</button>
       <button id="toggle-screen" class="ghost">Share screen</button>
     </div>
 
@@ -102,6 +99,19 @@
     <!-- Right sidebar: dev console + chat, each independently collapsible
          (shown once joined) -->
     <aside id="sidebar" class="sidebar" hidden>
+      <!-- Settings: room/AV toggles, moved off the top bar -->
+      <section id="settingspanel" class="sidesection" aria-label="Settings">
+        <header class="section-header">
+          <span>Settings</span>
+          <button id="settings-toggle" class="ghost" aria-label="Toggle settings">Hide</button>
+        </header>
+        <div class="section-body settings-body">
+          <button id="toggle-body" class="ghost">Hide bodies</button>
+          <button id="toggle-frame" class="ghost">Auto-frame: On</button>
+          <button id="toggle-spatial" class="ghost">Spatial audio: On</button>
+        </div>
+      </section>
+
       <!-- Avatar customisation (collapsed by default) -->
       <section id="avatarpanel" class="sidesection collapsed" aria-label="Avatar">
         <header class="section-header">
