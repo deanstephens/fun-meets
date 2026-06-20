@@ -40,6 +40,9 @@ const topbar = document.getElementById("topbar");
 const roomNameEl = document.getElementById("room-name");
 const peerCountEl = document.getElementById("peer-count");
 const copyLinkBtn = document.getElementById("copy-link");
+const toastEl = document.getElementById("toast");
+const toastEmoji = toastEl.querySelector(".toast-emoji");
+const toastText = toastEl.querySelector(".toast-text");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
@@ -381,6 +384,8 @@ async function start() {
           spawnThrow(emojiLayer, emoji, c.x, c.y,
             clamp01(data.nx) * stage.clientWidth, clamp01(data.ny) * stage.clientHeight);
         }
+      } else if (data.type === "roll") {
+        showRoll(data); // shared dice roll / random pick
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -1167,6 +1172,58 @@ function remoteCenter(id) {
   return { x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
 }
 
+// ---- Dice / random picker (a shared, transient result) ----
+
+const DICE_FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+let lastRollAt = 0;
+let toastTimer = null;
+
+function showToast(emoji, text) {
+  toastEmoji.textContent = emoji;
+  toastText.textContent = text;
+  toastEl.classList.remove("show");
+  void toastEl.offsetWidth; // restart the fade
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4200);
+}
+
+// Connected participants (us + remote peers) by display name.
+function participantNames() {
+  const names = [username];
+  remoteTiles.forEach((_, id) => names.push(displayName(id)));
+  return names;
+}
+
+// The roller computes the single result and broadcasts it, so everyone shows
+// the same outcome (no divergent per-client randomness).
+function rollDice() {
+  if (Date.now() - lastRollAt < 800) return;
+  lastRollAt = Date.now();
+  announceRoll({ kind: "dice", value: 1 + Math.floor(Math.random() * 6), by: username });
+}
+
+function pickSomeone() {
+  if (Date.now() - lastRollAt < 800) return;
+  lastRollAt = Date.now();
+  const names = participantNames();
+  announceRoll({ kind: "pick", who: names[Math.floor(Math.random() * names.length)], by: username });
+}
+
+function announceRoll(data) {
+  showRoll(data); // show locally (broadcast doesn't echo to us)
+  if (session) session.broadcast({ type: "roll", ...data });
+}
+
+function showRoll(data) {
+  const by = sanitizeName(data.by) || "Someone";
+  if (data.kind === "dice" && data.value >= 1 && data.value <= 6) {
+    showToast(DICE_FACES[data.value - 1], `${by} rolled a ${data.value}`);
+  } else if (data.kind === "pick" && data.who) {
+    showToast("🎯", `${by} picked ${sanitizeName(data.who) || "someone"}`);
+  }
+}
+
 // ---- Emotes (one-shot avatar animations) ----
 
 function playEmote(name) {
@@ -1323,6 +1380,18 @@ const ACTIONS = [
     label: "Dance",
     description: "Bust a little move",
     run: () => playEmote("dance"),
+  },
+  {
+    id: "roll-dice",
+    label: "Roll a die",
+    description: "Roll a 6-sided die — everyone sees the same result",
+    run: rollDice,
+  },
+  {
+    id: "pick-someone",
+    label: "Pick someone",
+    description: "Randomly pick a participant — who's next?",
+    run: pickSomeone,
   },
   {
     id: "create-card",

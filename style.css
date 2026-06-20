@@ -1249,6 +1249,46 @@ body {
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
+/* ---- Shared toast (dice rolls, random picks) ---- */
+.toast {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translate(-50%, -14px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 80vw;
+  padding: 11px 20px;
+  background: rgba(12, 14, 32, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+  z-index: 9;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.toast-emoji {
+  font-size: 38px;
+  line-height: 1;
+}
+
+.toast-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #eef0ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Emotes (one-shot avatar animations) ---- */
 
 /* Jump — the whole avatar hops (position is on `translate`, transform is free),
