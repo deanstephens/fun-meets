@@ -269,10 +269,13 @@ async function start() {
       if (typeof s.isHost === "boolean") {
         amHost = s.isHost;
         dcRole.textContent = s.isHost ? "host" : "guest";
-        // Once our role settles: the host restores the saved board (it starts
-        // alone); a guest will get the live board from the host instead. Only
-        // now do we allow saving, so the empty start state can't overwrite it.
-        if (!boardSettled) {
+        // Once the mesh says our role is *settled* (host elected, or guest
+        // bootstrapped): the host restores the saved board (it starts alone); a
+        // guest takes the live board from the host instead. Only now do we allow
+        // saving, so the empty start state can't overwrite a saved board. (A
+        // guest later re-elected as host keeps its live state — boardSettled is
+        // already true, so it won't wrongly restore from stale storage.)
+        if (s.roleSettled && !boardSettled) {
           boardSettled = true;
           if (s.isHost) restoreSavedBoard();
           boardReady = true;

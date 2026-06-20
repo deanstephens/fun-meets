@@ -167,6 +167,15 @@ The long-term direction is to grow the meeting from "a call you can move your we
   and **Load board from file** restores one and shares it with everyone in the
   room.
 
+### Milestone 21 — Host re-election ✅
+- The well-known "host" id is now a pure **introducer** decoupled from mesh
+  identity, so when the host leaves a remaining peer takes it over (the lowest-id
+  survivor) and becomes the new entry point and state distributor — **new
+  participants can still join and receive the current board** after the original
+  host is gone. A lightweight host heartbeat detects departures without waiting
+  on the slow WebRTC ICE timeout. Existing peers keep their direct connections
+  throughout (no identity migration, no reconnect).
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.

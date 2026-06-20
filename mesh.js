@@ -4,16 +4,22 @@
 // operate — consistent with the project's "no server" principle); audio/video
 // flows directly peer-to-peer over WebRTC.
 //
-// Topology: a full mesh. The first participant in a room claims a well-known
-// "host" id derived from the room name and acts only as the entry point. Every
-// new peer bootstraps off the host, then peers exchange rosters and dial each
-// other so that every participant ends up directly connected to every other
-// participant. There is no central media relay.
+// Topology: a full mesh. Every participant has a random "mesh" peer id. One
+// participant also holds a well-known "introducer" id derived from the room
+// name — that participant is the host/entry point. New peers connect to the
+// introducer just long enough to learn the roster (everyone's mesh ids), then
+// dial each other so every participant ends up directly connected to every
+// other. The introducer carries no media; there is no central relay.
+//
+// Host re-election: because the introducer id is separate from mesh identity,
+// when the host leaves the well-known id is freed and the lowest-id survivor
+// claims it — becoming the new entry point and state distributor — without any
+// peer having to change its identity or re-form its existing connections.
 //
 // Glare avoidance: for any pair, only the lexicographically-smaller peer id
 // initiates the data connection and the media call; the larger id waits and
-// answers. The host-bootstrap link is the one exception (a guest always dials
-// the host first regardless of id order).
+// answers. When the host introduces a newcomer it dials it directly so the link
+// forms regardless of id order.
 
 const Peer = window.Peer || (window.peerjs && window.peerjs.Peer);
 
@@ -26,19 +32,35 @@ const PEER_OPTS = {
       { urls: "stun:stun1.l.google.com:19302" },
     ],
   },
+  // Optional broker override (e.g. a self-hosted PeerJS server for testing);
+  // unset in normal use, where we rely on the public PeerJS cloud broker.
+  ...(typeof window !== "undefined" && window.__peerServer ? window.__peerServer : {}),
 };
 
 // How long to wait for a dialed peer to connect before declaring it failed.
 // Past this with no connection, it's almost always NAT/firewall traversal.
 const DIAL_TIMEOUT_MS = 12000;
 
+// The host beats this often so survivors notice it leaving without waiting for
+// the (slow) WebRTC ICE timeout; if a guest hears nothing for the timeout, it
+// triggers re-election.
+const HOST_BEAT_MS = 2500;
+const HOST_TIMEOUT_MS = 8000;
+
 export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog, onScreenStream, onScreenStop }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
   const state = {
-    peer: null,
-    myId: null,
-    isHost: false,
+    peer: null, // our random mesh peer
+    myId: null, // our mesh id
+    isHost: false, // do we currently hold the introducer?
+    roleSettled: false, // have we determined host vs guest yet?
+    hostListener: null, // the introducer Peer (only when we're host)
+    hostMeshId: null, // the mesh id of whoever currently holds the introducer
+    lastHostBeat: 0, // when we last heard the host's heartbeat
+    beatTimer: null, // host's heartbeat interval
+    livenessTimer: null, // guest's host-liveness check
+    reelectTimer: null, // pending claim/bootstrap retry
     connections: new Map(), // peerId -> DataConnection
     connecting: new Set(), // peerIds currently being dialed
     calls: new Map(), // peerId -> MediaConnection (webcam)
@@ -84,6 +106,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       room,
       myId: state.myId,
       isHost: state.isHost,
+      roleSettled: state.roleSettled,
       peerCount: state.connections.size,
       ...extra,
     });
@@ -93,14 +116,14 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     return [state.myId, ...state.connections.keys()];
   }
 
-  // Decide whether to dial `id`, and do it. Safe to call repeatedly.
-  function tryConnect(id, { bootstrap = false } = {}) {
+  // Decide whether to dial `id`, and do it. Safe to call repeatedly. Only the
+  // lower id initiates (glare avoidance); the higher id waits and answers.
+  function tryConnect(id) {
     if (state.closed || !id || id === state.myId) return;
     if (state.connections.has(id) || state.connecting.has(id)) return;
-    // Only the lower id initiates — except the host-bootstrap link.
-    if (!bootstrap && state.myId > id) return;
+    if (state.myId > id) return;
     state.connecting.add(id);
-    log("dial ->", id, bootstrap ? "(bootstrap)" : "");
+    log("dial ->", id);
     armDialTimeout(id);
     wireData(state.peer.connect(id, { reliable: true }));
   }
@@ -137,6 +160,11 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       if (!msg) return;
       if (msg.type === "roster" && Array.isArray(msg.peers)) {
         msg.peers.forEach((id) => tryConnect(id));
+      } else if (msg.type === "host" && msg.id) {
+        // The host's announce/heartbeat: who holds the introducer, and proof
+        // it's still alive.
+        state.hostMeshId = msg.id;
+        state.lastHostBeat = Date.now();
       } else if (msg.type === "app") {
         // Application-level payload (position updates, future game state, …).
         if (onMessage) onMessage(conn.peer, msg.data);
@@ -231,6 +259,12 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       // A peer that left can no longer be sharing a screen to us.
       if (onScreenStop) onScreenStop(id);
       emitStatus();
+      // If the host left, the lowest-id survivor takes over the introducer.
+      if (id === state.hostMeshId) {
+        log("host left -> re-election");
+        state.hostMeshId = null;
+        maybeReelect();
+      }
     }
   }
 
@@ -265,49 +299,153 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     });
   }
 
-  function startGuest() {
-    const guest = new Peer(undefined, PEER_OPTS);
-    guest.on("open", (id) => {
-      state.peer = guest;
-      state.myId = id;
-      state.isHost = false;
-      log("guest id", id);
-      wireCommon();
+  function lowestKnownId() {
+    return knownIds().reduce((a, b) => (a < b ? a : b));
+  }
+
+  function retry(fn, ms) {
+    if (state.closed || state.isHost || state.reelectTimer) return;
+    state.reelectTimer = setTimeout(() => {
+      state.reelectTimer = null;
+      if (!state.closed && !state.isHost) fn();
+    }, ms);
+  }
+
+  // Claim the well-known introducer id (become host). Race-safe: the broker only
+  // lets one peer hold it; a loser falls back to bootstrapping off the winner.
+  function claimHost() {
+    if (state.closed || state.isHost || state.hostListener) return;
+    log("claiming introducer:", hostId);
+    const listener = new Peer(hostId, PEER_OPTS);
+    state.hostListener = listener;
+    listener.on("open", () => {
+      if (state.closed) { try { listener.destroy(); } catch (_) {} return; }
+      state.isHost = true;
+      state.roleSettled = true;
+      state.hostMeshId = state.myId;
+      log("became host (introducer)");
+      wireListener(listener);
+      startHostBeat(); // announce + keep announcing that we're the host
       emitStatus();
-      tryConnect(hostId, { bootstrap: true });
     });
-    guest.on("error", (e) => {
+    listener.on("error", (e) => {
       const type = e && e.type;
-      log("guest error", type);
-      if (type === "peer-unavailable") {
-        const m = /peer (\S+)/.exec(e.message || "");
-        if (m) state.connecting.delete(m[1]);
-      } else if (!state.peer) {
-        emitStatus({ error: type || String(e) });
+      if (state.hostListener === listener) state.hostListener = null;
+      try { listener.destroy(); } catch (_) {}
+      if (type === "unavailable-id") {
+        bootstrap(); // someone else holds it — join them (the common guest path)
+      } else {
+        log("introducer-claim error", type);
+        retry(claimHost, 1200);
       }
     });
   }
 
-  // 1) Try to claim the well-known host id for this room.
-  log("claiming host id:", hostId);
-  const hostPeer = new Peer(hostId, PEER_OPTS);
-  hostPeer.on("open", (id) => {
-    state.peer = hostPeer;
+  // As host: introduce each newcomer that connects to the well-known id, then
+  // pull them into the mesh. The introducer link carries no media/app data.
+  function wireListener(listener) {
+    listener.on("connection", (conn) => {
+      conn.on("open", () => {
+        log("introduce ->", conn.peer);
+        try { conn.send({ type: "roster", peers: knownIds(), host: state.myId }); } catch (_) {}
+        // The newcomer has our mesh id in that roster, so normal id-ordering
+        // forms the host<->newcomer link with no glare: we dial only if our id
+        // is lower, otherwise the newcomer dials us.
+        tryConnect(conn.peer);
+        // The introducer link itself isn't a mesh connection; drop it once the
+        // newcomer has the roster.
+        setTimeout(() => { try { conn.close(); } catch (_) {} }, 5000);
+      });
+      conn.on("error", () => {});
+    });
+    listener.on("disconnected", () => {
+      if (!state.closed) { try { listener.reconnect(); } catch (_) {} }
+    });
+    listener.on("error", (e) => log("introducer error", e && e.type));
+  }
+
+  // Connect to the introducer only long enough to learn the roster, then mesh
+  // directly. This is the fast path for guests (the common case). If no
+  // introducer answers, claim the id and become the host.
+  function bootstrap() {
+    if (state.closed || state.isHost) return;
+    log("bootstrap -> introducer");
+    let conn;
+    try { conn = state.peer.connect(hostId, { reliable: true }); } catch (_) { retry(claimHost, 600); return; }
+    let got = false;
+    conn.on("data", (msg) => {
+      if (msg && msg.type === "roster" && Array.isArray(msg.peers)) {
+        got = true;
+        if (msg.host) { state.hostMeshId = msg.host; state.lastHostBeat = Date.now(); }
+        if (!state.roleSettled) { state.roleSettled = true; emitStatus(); } // settled as a guest
+        msg.peers.forEach((id) => tryConnect(id));
+      }
+    });
+    conn.on("error", (e) => {
+      log("bootstrap error", e && e.type);
+      if (!got && !state.isHost) retry(claimHost, 600); // no introducer → claim it
+    });
+    // No roster and still nobody after a beat → introducer is gone; claim it.
+    setTimeout(() => {
+      if (!state.closed && !got && !state.isHost && state.connections.size === 0) claimHost();
+    }, 6000);
+  }
+
+  // As host: repeatedly announce ourselves so survivors can detect us leaving
+  // quickly (without waiting on the WebRTC ICE timeout).
+  function startHostBeat() {
+    if (state.beatTimer) return;
+    broadcastToMesh({ type: "host", id: state.myId });
+    state.beatTimer = setInterval(() => {
+      if (state.closed || !state.isHost) return;
+      broadcastToMesh({ type: "host", id: state.myId });
+    }, HOST_BEAT_MS);
+  }
+
+  // As guest: if the host's heartbeat goes quiet, trigger re-election.
+  function startLivenessCheck() {
+    if (state.livenessTimer) return;
+    state.livenessTimer = setInterval(() => {
+      if (state.closed || state.isHost || !state.hostMeshId) return;
+      if (Date.now() - state.lastHostBeat > HOST_TIMEOUT_MS) {
+        log("host heartbeat timeout -> re-election");
+        state.hostMeshId = null;
+        maybeReelect();
+      }
+    }, 2000);
+  }
+
+  // The host left: the lowest-id survivor takes over the introducer (others
+  // wait). If we're now alone we also (re)claim so new joiners can reach us.
+  function maybeReelect() {
+    if (state.closed || state.isHost) return;
+    if (state.connections.size === 0 || lowestKnownId() === state.myId) claimHost();
+  }
+
+  function broadcastToMesh(msg) {
+    state.connections.forEach((c) => {
+      try { if (c.open) c.send(msg); } catch (_) {}
+    });
+  }
+
+  // Start: take a random mesh id, then become host or bootstrap.
+  const peer = new Peer(undefined, PEER_OPTS);
+  state.peer = peer;
+  peer.on("open", (id) => {
     state.myId = id;
-    state.isHost = true;
-    log("became host", id);
+    log("mesh id", id);
     wireCommon();
+    startLivenessCheck();
     emitStatus();
+    claimHost(); // claim the introducer (become host); if taken, bootstrap off it
   });
-  hostPeer.on("error", (e) => {
+  peer.on("error", (e) => {
     const type = e && e.type;
-    if (type === "unavailable-id") {
-      // Host already exists — join as a guest with a random id.
-      log("host taken; joining as guest");
-      try { hostPeer.destroy(); } catch (_) {}
-      startGuest();
-    } else if (!state.peer) {
-      log("host-claim error", type);
+    log("mesh peer error", type);
+    if (type === "peer-unavailable") {
+      const m = /peer (\S+)/.exec(e.message || "");
+      if (m) state.connecting.delete(m[1]);
+    } else if (!state.myId) {
       emitStatus({ error: type || String(e) });
     }
   });
@@ -340,11 +478,15 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     },
     leave() {
       state.closed = true;
+      if (state.reelectTimer) { clearTimeout(state.reelectTimer); state.reelectTimer = null; }
+      if (state.beatTimer) { clearInterval(state.beatTimer); state.beatTimer = null; }
+      if (state.livenessTimer) { clearInterval(state.livenessTimer); state.livenessTimer = null; }
       state.dialTimers.forEach((t) => clearTimeout(t));
       state.dialTimers.clear();
       state.screenCalls.forEach((c) => { try { c.close(); } catch (_) {} });
       state.calls.forEach((c) => { try { c.close(); } catch (_) {} });
       state.connections.forEach((c) => { try { c.close(); } catch (_) {} });
+      try { state.hostListener && state.hostListener.destroy(); } catch (_) {}
       try { state.peer && state.peer.destroy(); } catch (_) {}
     },
     getState: () => state,
