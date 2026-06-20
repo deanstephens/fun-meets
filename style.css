@@ -348,10 +348,11 @@ body {
 .card {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 172px;
+  width: 176px;
   min-height: 96px;
   display: flex;
-  padding: 7px;
+  flex-direction: column;
+  padding: 6px 7px 7px;
   pointer-events: auto;
   background: #fff3b0;
   color: #2a2410;
@@ -359,10 +360,76 @@ body {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
 }
 
+.card.dragging {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+/* Header = drag handle + author + tools (colours, delete). */
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  cursor: grab;
+  touch-action: none; /* let pointer-drag work on touch */
+}
+
+.card.dragging .card-head {
+  cursor: grabbing;
+}
+
+.card-author {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-tools {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.card-color {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.card-color.sel {
+  outline: 2px solid rgba(0, 0, 0, 0.55);
+  outline-offset: 1px;
+}
+
+.card-delete {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.card-delete:hover {
+  color: #c0392b;
+}
+
 .card-text {
   flex: 1;
   width: 100%;
-  min-height: 84px;
+  min-height: 72px;
   resize: none;
   border: none;
   outline: none;
@@ -374,7 +441,7 @@ body {
 }
 
 .card-text::placeholder {
-  color: #9a8d4a;
+  color: rgba(0, 0, 0, 0.4);
 }
 
 /* ---- Avatar calibration (dev) ---- */
