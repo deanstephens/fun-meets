@@ -283,7 +283,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       if (id === state.hostMeshId) {
         log("host left -> re-election");
         state.hostMeshId = null;
-        maybeReelect();
+        maybeReelect(id);
       }
     }
   }
@@ -319,8 +319,15 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     });
   }
 
-  function lowestKnownId() {
-    return knownIds().reduce((a, b) => (a < b ? a : b));
+  // The lowest-id survivor takes over the introducer — excluding the host that
+  // just left (it can still linger in our roster until the WebRTC drop fires),
+  // so the survivors don't all defer to a dead peer and nobody takes over.
+  function maybeReelect(deadId) {
+    if (state.closed || state.isHost) return;
+    const survivors = knownIds().filter((id) => id !== deadId);
+    if (survivors.length === 0 || survivors.reduce((a, b) => (a < b ? a : b)) === state.myId) {
+      claimHost();
+    }
   }
 
   function retry(fn, ms) {
@@ -422,24 +429,21 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     }, HOST_BEAT_MS);
   }
 
-  // As guest: if the host's heartbeat goes quiet, trigger re-election.
+  // As guest: if the host's heartbeat goes quiet, trigger re-election. Because
+  // the WebRTC drop is slow, the dead host can still linger in our roster — so
+  // we drop its ghost here and exclude it from the election.
   function startLivenessCheck() {
     if (state.livenessTimer) return;
     state.livenessTimer = setInterval(() => {
       if (state.closed || state.isHost || !state.hostMeshId) return;
       if (Date.now() - state.lastHostBeat > HOST_TIMEOUT_MS) {
-        log("host heartbeat timeout -> re-election");
+        const dead = state.hostMeshId;
         state.hostMeshId = null;
-        maybeReelect();
+        log("host heartbeat timeout -> re-election");
+        if (state.connections.has(dead)) dropPeer(dead); // clear the ghost tile
+        maybeReelect(dead);
       }
     }, 2000);
-  }
-
-  // The host left: the lowest-id survivor takes over the introducer (others
-  // wait). If we're now alone we also (re)claim so new joiners can reach us.
-  function maybeReelect() {
-    if (state.closed || state.isHost) return;
-    if (state.connections.size === 0 || lowestKnownId() === state.myId) claimHost();
   }
 
   function broadcastToMesh(msg) {
