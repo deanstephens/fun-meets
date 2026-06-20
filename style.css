@@ -38,8 +38,9 @@ body {
   left: 0;
   width: var(--tile-size);
   height: var(--tile-size);
-  /* Position is driven via transform for smooth, GPU-friendly movement */
-  will-change: transform;
+  /* Position is driven via the `translate` property, leaving `transform` free
+     for one-shot emote animations (jump etc.). */
+  will-change: transform, translate;
 }
 
 .head {
@@ -1247,6 +1248,97 @@ body {
 .tile.holding.facing-left .figure .arm-r { transform: rotate(52deg) !important; }
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
+
+/* ---- Emotes (one-shot avatar animations) ---- */
+
+/* Jump — the whole avatar hops (position is on `translate`, transform is free),
+   and the arms swing up as it rises and back down as it lands. */
+.tile.emote-jump { animation: emote-jump 0.9s ease; }
+@keyframes emote-jump {
+  0%, 100% { transform: translateY(0); }
+  22% { transform: translateY(-38px); }
+  44% { transform: translateY(0); }
+  60% { transform: translateY(-18px); }
+  74% { transform: translateY(0); }
+}
+.tile.emote-jump .figure .arm-l { animation: emote-jump-arm-l 0.9s ease !important; }
+.tile.emote-jump .figure .arm-r { animation: emote-jump-arm-r 0.9s ease !important; }
+@keyframes emote-jump-arm-l {
+  0%, 100% { transform: rotate(-17deg); }
+  22% { transform: rotate(108deg); }  /* up at the big hop */
+  44% { transform: rotate(-17deg); }
+  60% { transform: rotate(92deg); }   /* up at the small hop */
+  74% { transform: rotate(-17deg); }
+}
+@keyframes emote-jump-arm-r {
+  0%, 100% { transform: rotate(17deg); }
+  22% { transform: rotate(-108deg); }
+  44% { transform: rotate(17deg); }
+  60% { transform: rotate(-92deg); }
+  74% { transform: rotate(17deg); }
+}
+
+/* Wave — head tilts, and (if bodies shown) the right arm raises and waves. */
+.tile.emote-wave .head { animation: emote-wave-head 1.3s ease; transform-origin: 50% 75%; }
+@keyframes emote-wave-head {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(-12deg); }
+  38% { transform: rotate(10deg); }
+  60% { transform: rotate(-9deg); }
+  82% { transform: rotate(7deg); }
+}
+.tile.emote-wave .figure .arm-r { animation: emote-wave-arm 1.3s ease !important; }
+.tile.emote-wave .figure .arm-r .forearm { animation: emote-wave-forearm 1.3s ease !important; }
+@keyframes emote-wave-arm {
+  0%, 100% { transform: rotate(17deg); }
+  20%, 90% { transform: rotate(-92deg); } /* out to the side, beside the head */
+}
+@keyframes emote-wave-forearm {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-46deg); }
+  55% { transform: rotate(-86deg); }
+  75% { transform: rotate(-46deg); }
+}
+
+/* Dance — a big bop: the whole avatar bounces, the head grooves side to side,
+   the body sways the other way, and the arms pump up. */
+.tile.emote-dance { animation: emote-dance-bop 1.8s ease-in-out; }
+@keyframes emote-dance-bop {
+  0%, 100% { transform: translateY(0); }
+  16% { transform: translateY(-16px); }
+  33% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+  66% { transform: translateY(0); }
+  83% { transform: translateY(-16px); }
+}
+.tile.emote-dance .head { animation: emote-dance-head 1.8s ease-in-out; }
+@keyframes emote-dance-head {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  12% { transform: translateX(-9px) rotate(-18deg); }
+  37% { transform: translateX(9px) rotate(18deg); }
+  62% { transform: translateX(-9px) rotate(-18deg); }
+  87% { transform: translateX(9px) rotate(18deg); }
+}
+.tile.emote-dance .figure { animation: emote-dance-body 1.8s ease-in-out; }
+@keyframes emote-dance-body {
+  0%, 100% { rotate: 0deg; }
+  12% { rotate: 18deg; }
+  37% { rotate: -18deg; }
+  62% { rotate: 18deg; }
+  87% { rotate: -18deg; }
+}
+.tile.emote-dance .figure .arm-l { animation: emote-dance-arm-l 1.8s ease-in-out !important; }
+.tile.emote-dance .figure .arm-r { animation: emote-dance-arm-r 1.8s ease-in-out !important; }
+@keyframes emote-dance-arm-l {
+  0%, 100% { transform: rotate(-17deg); }
+  16%, 50%, 83% { transform: rotate(108deg); } /* pump up-left on the bops */
+  33%, 66% { transform: rotate(-17deg); }
+}
+@keyframes emote-dance-arm-r {
+  0%, 100% { transform: rotate(17deg); }
+  16%, 50%, 83% { transform: rotate(-108deg); } /* pump up-right */
+  33%, 66% { transform: rotate(17deg); }
+}
 
 /* Overlay / start screen */
 #overlay {
