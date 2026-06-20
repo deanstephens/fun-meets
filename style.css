@@ -951,7 +951,7 @@ body {
 .figure .arm {
   top: var(--sh-y, 13px);
   width: 5px;
-  height: 25px;
+  height: var(--upperarm, 26px); /* upper-arm segment; elbow sits at its base */
   transform-origin: top center;
 }
 
@@ -959,6 +959,19 @@ body {
   left: 0;
   width: 5px;
   height: 100%;
+}
+
+/* Forearm — the second arm segment, hinged at the elbow (the base of the upper
+   arm). Its length is the rest of the 50px arm; --elbow bends it (0 = straight,
+   so the two segments read as one). */
+.figure .forearm {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 5px;
+  height: calc(50px - var(--upperarm, 26px));
+  transform-origin: top center;
+  transform: rotate(var(--elbow, 0deg));
 }
 
 .figure .arm-l { left: calc(var(--sh-lx, 33.5px) - 2.5px); transform: rotate(-17deg); }
@@ -1090,6 +1103,26 @@ body {
 @keyframes limb-b {
   0%, 100% { transform: rotate(-16deg); }
   50% { transform: rotate(16deg); }
+}
+
+/* Forearms lag the upper-arm swing, so the elbows bend as the arms pump.
+   Mirrored left/right and in counter-phase, matching the upper arms above. */
+.tile.walking .figure .arm-r .forearm {
+  animation: forearm-a 0.5s ease-in-out infinite;
+}
+
+.tile.walking .figure .arm-l .forearm {
+  animation: forearm-b 0.5s ease-in-out infinite;
+}
+
+@keyframes forearm-a {
+  0%, 100% { transform: rotate(30deg); }
+  50% { transform: rotate(12deg); }
+}
+
+@keyframes forearm-b {
+  0%, 100% { transform: rotate(-30deg); }
+  50% { transform: rotate(-12deg); }
 }
 
 /* Overlay / start screen */

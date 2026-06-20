@@ -32,9 +32,17 @@ export const SHOULDER_CENTER = 40;
 export const SHOULDER_SX = 6.5;
 export const SHOULDER_SY = 13;
 
-// Set the arm-pivot (shoulder) position on the figure from the body outfit's
-// calibrated sx/sy. The arms (figure children) read --sh-lx/--sh-rx/--sh-y.
-export function applyShoulders(fig, bodyOption) {
+// Arm segmentation: total arm length, the default upper-arm length (the rest is
+// the forearm), and the resting elbow angle. The two segments are 50px total
+// (upper 26 + forearm 24); elbow 0deg renders them straight/collinear.
+export const ARM_LEN = 50;
+export const UPPER_ARM = 26;
+export const ELBOW_REST = 0;
+
+// Set the arm rig (shoulder pivot + elbow) on the figure from the body outfit's
+// calibrated values. The arm parts read --sh-lx/--sh-rx/--sh-y (shoulder),
+// --upperarm (elbow position) and --elbow (resting forearm angle).
+export function applyArmRig(fig, bodyOption) {
   const a = AVATAR_POSITIONS.body && AVATAR_POSITIONS.body[bodyOption];
   if (!a) return;
   if (a.sx != null) {
@@ -42,6 +50,8 @@ export function applyShoulders(fig, bodyOption) {
     fig.style.setProperty("--sh-rx", SHOULDER_CENTER + a.sx + "px");
   }
   if (a.sy != null) fig.style.setProperty("--sh-y", a.sy + "px");
+  if (a.ua != null) fig.style.setProperty("--upperarm", a.ua + "px");
+  if (a.elbow != null) fig.style.setProperty("--elbow", a.elbow + "deg");
 }
 
 export const AVATAR_OPTIONS = {
@@ -124,17 +134,24 @@ export function buildFigure(cfg) {
     const cloth = asset("body", cfg.body, "cloth");
     applyAdjust(cloth, "body", cfg.body);
     torso.appendChild(cloth);
-    applyShoulders(fig, cfg.body); // move the arm pivots to this top's shoulders
+    applyArmRig(fig, cfg.body); // shoulder pivots + elbow for this top
   }
   fig.appendChild(torso);
 
-  const armL = div("limb arm arm-l");
-  armL.appendChild(div("stick"));
-  const armR = div("limb arm arm-r");
-  armR.appendChild(div("stick"));
-  fig.appendChild(armL);
-  fig.appendChild(armR);
+  fig.appendChild(armEl("l"));
+  fig.appendChild(armEl("r"));
   return fig;
+}
+
+// An arm in two segments hinged at the elbow: an upper arm (pivots at the
+// shoulder) holding a forearm (pivots at the elbow). Defaults render straight.
+function armEl(side) {
+  const arm = div("limb arm arm-" + side);
+  arm.appendChild(div("stick")); // upper arm
+  const forearm = div("forearm");
+  forearm.appendChild(div("stick")); // forearm
+  arm.appendChild(forearm);
+  return arm;
 }
 
 export function buildHat(type) {

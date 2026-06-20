@@ -15,6 +15,7 @@ import { joinRoom } from "./mesh.js";
 import {
   AVATAR_OPTIONS, SLOT_LABELS, OPTION_LABELS, DEFAULT_AVATAR,
   normalizeAvatar, applyAvatar, SHOULDER_CENTER, SHOULDER_SX, SHOULDER_SY,
+  UPPER_ARM, ELBOW_REST,
 } from "./avatar.js";
 import { AVATAR_POSITIONS } from "./avatar-positions.js";
 import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
@@ -878,6 +879,10 @@ function initCalibration() {
   const syIn = document.getElementById("cal-sy");
   const sxVal = document.getElementById("cal-sx-val");
   const syVal = document.getElementById("cal-sy-val");
+  const uaIn = document.getElementById("cal-ua");
+  const elbowIn = document.getElementById("cal-elbow");
+  const uaVal = document.getElementById("cal-ua-val");
+  const elbowVal = document.getElementById("cal-elbow-val");
 
   const SLOTS = Object.keys(AVATAR_OPTIONS);
   // Working copy seeded from the committed adjustments.
@@ -915,11 +920,13 @@ function initCalibration() {
     });
   }
 
-  // Shoulders (arm pivots) — body slot only.
+  // Arm rig (shoulder pivots + elbow) — body slot only.
   function shoulders() {
     const a = adj();
     if (a.sx == null) a.sx = SHOULDER_SX;
     if (a.sy == null) a.sy = SHOULDER_SY;
+    if (a.ua == null) a.ua = UPPER_ARM;
+    if (a.elbow == null) a.elbow = ELBOW_REST;
     return a;
   }
 
@@ -930,6 +937,8 @@ function initCalibration() {
     fig.style.setProperty("--sh-lx", SHOULDER_CENTER - a.sx + "px");
     fig.style.setProperty("--sh-rx", SHOULDER_CENTER + a.sx + "px");
     fig.style.setProperty("--sh-y", a.sy + "px");
+    fig.style.setProperty("--upperarm", a.ua + "px");
+    fig.style.setProperty("--elbow", a.elbow + "deg");
   }
 
   function syncLabels() {
@@ -938,6 +947,8 @@ function initCalibration() {
     sVal.textContent = Number(sIn.value).toFixed(2);
     sxVal.textContent = sxIn.value;
     syVal.textContent = syIn.value;
+    uaVal.textContent = uaIn.value;
+    elbowVal.textContent = elbowIn.value;
   }
 
   function showOutfit() {
@@ -955,6 +966,8 @@ function initCalibration() {
       const s = shoulders();
       sxIn.value = s.sx;
       syIn.value = s.sy;
+      uaIn.value = s.ua;
+      elbowIn.value = s.elbow;
       applyShoulderVars();
     }
     syncLabels();
@@ -974,6 +987,8 @@ function initCalibration() {
     const a = adj();
     a.sx = Number(sxIn.value);
     a.sy = Number(syIn.value);
+    a.ua = Number(uaIn.value);
+    a.elbow = Number(elbowIn.value);
     syncLabels();
     applyShoulderVars();
   }
@@ -998,6 +1013,8 @@ function initCalibration() {
         if (slot === "body") {
           if (a.sx != null && a.sx !== SHOULDER_SX) entry.sx = a.sx;
           if (a.sy != null && a.sy !== SHOULDER_SY) entry.sy = a.sy;
+          if (a.ua != null && a.ua !== UPPER_ARM) entry.ua = a.ua;
+          if (a.elbow != null && a.elbow !== ELBOW_REST) entry.elbow = a.elbow;
         }
         if (Object.keys(entry).length) (out[slot] = out[slot] || {})[o] = entry;
       }
@@ -1030,7 +1047,7 @@ function initCalibration() {
     showOutfit();
   });
   [xIn, yIn, sIn].forEach((el) => el.addEventListener("input", onSlide));
-  [sxIn, syIn].forEach((el) => el.addEventListener("input", onSlideShoulder));
+  [sxIn, syIn, uaIn, elbowIn].forEach((el) => el.addEventListener("input", onSlideShoulder));
   document.getElementById("cal-export").addEventListener("click", exportJson);
 
   panel.hidden = false;

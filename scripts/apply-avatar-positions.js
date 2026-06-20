@@ -12,9 +12,11 @@ const fs = require("fs");
 const path = require("path");
 
 const SLOTS = ["hat", "body", "legs", "feet"];
-// Default shoulder (arm pivot) half-spread / height for tops; matches avatar.js.
+// Defaults for body arm-rig fields; must match avatar.js.
 const SHOULDER_SX = 6.5;
 const SHOULDER_SY = 13;
+const UPPER_ARM = 26; // elbow position (upper-arm length)
+const ELBOW_REST = 0; // resting forearm angle
 
 function fail(msg) {
   console.error("error: " + msg);
@@ -56,6 +58,16 @@ for (const slot of Object.keys(raw)) {
         const sy = Number(a.sy);
         if (!Number.isFinite(sy)) fail(`bad sy for body.${opt}`);
         if (sy !== SHOULDER_SY) entry.sy = sy;
+      }
+      if (a.ua != null) {
+        const ua = Number(a.ua);
+        if (!Number.isFinite(ua)) fail(`bad ua for body.${opt}`);
+        if (ua !== UPPER_ARM) entry.ua = ua;
+      }
+      if (a.elbow != null) {
+        const elbow = Number(a.elbow);
+        if (!Number.isFinite(elbow)) fail(`bad elbow for body.${opt}`);
+        if (elbow !== ELBOW_REST) entry.elbow = elbow;
       }
     }
     if (Object.keys(entry).length === 0) continue; // no-op
