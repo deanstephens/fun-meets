@@ -25,6 +25,28 @@ const Peer = window.Peer || (window.peerjs && window.peerjs.Peer);
 
 const ROOM_PREFIX = "funmeets-v1-";
 
+// Resolve an optional signaling-broker override. By default we use the public
+// PeerJS cloud broker. Two ways to point elsewhere (e.g. a private/self-hosted
+// PeerJS server on your LAN):
+//   * window.__peerServer = { host, port, path, secure }  (set before load)
+//   * a `?broker=local` URL param — uses a broker co-located with this page
+//     (same host, port 9100, path /myapp), over wss:// when the page is HTTPS.
+function brokerOverride() {
+  if (typeof window === "undefined") return {};
+  if (window.__peerServer) return window.__peerServer;
+  try {
+    if (new URLSearchParams(window.location.search).get("broker") === "local") {
+      return {
+        host: window.location.hostname,
+        port: 9100,
+        path: "/myapp",
+        secure: window.location.protocol === "https:",
+      };
+    }
+  } catch (_) {}
+  return {};
+}
+
 const PEER_OPTS = {
   config: {
     iceServers: [
@@ -32,9 +54,7 @@ const PEER_OPTS = {
       { urls: "stun:stun1.l.google.com:19302" },
     ],
   },
-  // Optional broker override (e.g. a self-hosted PeerJS server for testing);
-  // unset in normal use, where we rely on the public PeerJS cloud broker.
-  ...(typeof window !== "undefined" && window.__peerServer ? window.__peerServer : {}),
+  ...brokerOverride(),
 };
 
 // How long to wait for a dialed peer to connect before declaring it failed.
