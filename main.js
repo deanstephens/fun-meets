@@ -131,6 +131,9 @@ const CARD_BG = {
   yellow: "#fff3b0", pink: "#ffc6d9", green: "#c4f0c5", blue: "#bfe3ff", purple: "#e3cffb",
 };
 let cardDrag = null; // in-progress card drag state
+let heldCardId = null; // card our avatar is carrying (toggle with E)
+const CARRY_SIDE_OFFSET = 0.36; // held card offset to the facing side (×tile size)
+const CARRY_HAND_OFFSET = 0.52; // held card offset below the head (~hand height)
 
 // Huddle/breakout zones: id -> { id, cx, cy, r, el }. People in the same zone
 // hear each other clearly; everyone else is muffled.
@@ -345,6 +348,7 @@ async function start() {
         }
         remotePositions.set(id, { nx: data.nx, ny: data.ny });
         applyRemotePosition(id);
+        if (tile) tile.el.classList.toggle("holding", !!data.holding); // gripping a card
         if (moved) markRemoteWalking(id); // animate their body while moving
       } else if (data.type === "chat" && typeof data.text === "string") {
         const text = data.text.slice(0, 200);
@@ -500,7 +504,7 @@ function localNorm() {
 
 function posMessage() {
   const n = localNorm();
-  return { type: "pos", nx: n.nx, ny: n.ny };
+  return { type: "pos", nx: n.nx, ny: n.ny, holding: !!heldCardId };
 }
 
 function broadcastPosition() {
@@ -690,9 +694,11 @@ function loop(timestamp) {
     pos.y += dy * SPEED * dt;
     clampPosition();
     applyPosition();
+    if (heldCardId) carryCardToMe(); // a held card travels with us
     // Throttle position updates to peers while moving.
     if (timestamp - lastPosSent >= POS_INTERVAL) {
       broadcastPosition();
+      if (heldCardId) broadcastCard(cards.get(heldCardId));
       lastPosSent = timestamp;
     }
     // Drop an emoji trail behind us if it's enabled.
@@ -705,7 +711,9 @@ function loop(timestamp) {
     wasMoving = true;
   } else if (wasMoving) {
     // Send one final update so peers see the exact resting position.
+    if (heldCardId) carryCardToMe();
     broadcastPosition();
+    if (heldCardId) broadcastCard(cards.get(heldCardId));
     wasMoving = false;
   }
 
@@ -751,6 +759,12 @@ function onKeyDown(e) {
   if (e.key === "Enter" && !sidebar.hidden) {
     expandChat();
     chatInput.focus();
+    e.preventDefault();
+    return;
+  }
+  // E picks up the nearest card (or drops the one you're holding).
+  if ((e.key === "e" || e.key === "E") && running) {
+    toggleCarry();
     e.preventDefault();
     return;
   }
@@ -1469,7 +1483,10 @@ function importBoard() {
 function cardMessage(c) {
   return {
     type: "card", op: "upsert",
-    card: { id: c.id, nx: c.nx, ny: c.ny, text: c.text, color: c.color, author: c.author },
+    card: {
+      id: c.id, nx: c.nx, ny: c.ny, text: c.text, color: c.color, author: c.author,
+      held: c.id === heldCardId,
+    },
   };
 }
 
@@ -1553,6 +1570,9 @@ function upsertCard(data, focus) {
   card.color = color;
   if (author) card.author = author;
   applyCardColor(card);
+  // A card someone is carrying shrinks to "hand size" so the arms show around it
+  // (the local carried card sets this in pickUp/drop; this covers remote cards).
+  if (id !== heldCardId) card.el.classList.toggle("held", !!data.held);
   card.authorEl.textContent = card.author || "";
   card.authorEl.title = card.author ? "by " + card.author : "";
   // Don't clobber the editor's caret while it's being edited locally.
@@ -1581,10 +1601,62 @@ function recolorCard(id, color, broadcast) {
 function deleteCard(id, broadcast) {
   const card = cards.get(id);
   if (!card) return;
+  if (heldCardId === id) { heldCardId = null; selfTile.classList.remove("holding"); broadcastPosition(); }
   card.el.remove();
   cards.delete(id);
   if (broadcast && session) session.broadcast({ type: "card", op: "delete", id });
   saveBoard();
+}
+
+// ---- Carry a card with your avatar (toggle with E) ----
+
+function toggleCarry() {
+  if (heldCardId) { dropCard(); return; }
+  const id = nearestCardId();
+  if (id) pickUpCard(id);
+}
+
+// The nearest card within reach of our avatar, or null.
+function nearestCardId() {
+  const me = localCenter();
+  let best = null;
+  let bestD = tileSize() * 1.3; // pick-up radius
+  cards.forEach((c) => {
+    const d = Math.hypot(me.x - c.nx * stage.clientWidth, me.y - c.ny * stage.clientHeight);
+    if (d < bestD) { bestD = d; best = c.id; }
+  });
+  return best;
+}
+
+function pickUpCard(id) {
+  if (!cards.has(id)) return;
+  heldCardId = id;
+  selfTile.classList.add("holding"); // arms grip it (see CSS)
+  cards.get(id).el.classList.add("held"); // shrink to hand size
+  carryCardToMe();
+  broadcastPosition(); // announce the holding state to peers
+  broadcastCard(cards.get(id));
+  saveBoard();
+}
+
+function dropCard() {
+  const card = heldCardId && cards.get(heldCardId);
+  heldCardId = null;
+  selfTile.classList.remove("holding");
+  if (card) card.el.classList.remove("held");
+  broadcastPosition();
+  if (card) { broadcastCard(card); saveBoard(); }
+}
+
+// Snap the held card to our hands — out to the side we're facing, at arm height.
+function carryCardToMe() {
+  const card = heldCardId && cards.get(heldCardId);
+  if (!card) { heldCardId = null; selfTile.classList.remove("holding"); return; }
+  const me = localCenter();
+  const dir = selfTile.classList.contains("facing-left") ? -1 : 1;
+  card.nx = clamp01((me.x + dir * tileSize() * CARRY_SIDE_OFFSET) / stage.clientWidth);
+  card.ny = clamp01((me.y + tileSize() * CARRY_HAND_OFFSET) / stage.clientHeight);
+  positionCard(card);
 }
 
 // ---- Card dragging (move) ----
@@ -1768,6 +1840,7 @@ function onResize() {
   applyPosition();
   remoteTiles.forEach((_, id) => applyRemotePosition(id));
   cards.forEach(positionCard);
+  if (heldCardId) carryCardToMe(); // keep the held card snapped to our hands
   zones.forEach(positionZone);
 }
 
