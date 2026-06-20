@@ -365,6 +365,12 @@ body {
   z-index: 1;
 }
 
+/* A carried card shrinks to "hand size" so the avatar's arms show around it. */
+.card.held {
+  transform: translate(-50%, -50%) scale(0.52);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+
 /* Header = drag handle + author + tools (colours, delete). */
 .card-head {
   display: flex;
@@ -1220,6 +1226,27 @@ body {
   0%, 100% { transform: rotate(-30deg); }
   50% { transform: rotate(-12deg); }
 }
+
+/* Carrying a card: the arms stop swinging and reach out to the facing side to
+   hold it (mirrored when facing left). */
+.tile.holding .figure .arm-l,
+.tile.holding .figure .arm-r,
+.tile.holding .figure .arm-l .forearm,
+.tile.holding .figure .arm-r .forearm {
+  animation: none !important;
+}
+
+/* Facing right (default): both arms reach to the right. */
+.tile.holding .figure .arm-l,
+.tile.holding .figure .arm-r { transform: rotate(-52deg) !important; }
+.tile.holding .figure .arm-l .forearm,
+.tile.holding .figure .arm-r .forearm { transform: rotate(-30deg) !important; }
+
+/* Facing left: mirror, reach to the left. */
+.tile.holding.facing-left .figure .arm-l,
+.tile.holding.facing-left .figure .arm-r { transform: rotate(52deg) !important; }
+.tile.holding.facing-left .figure .arm-l .forearm,
+.tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
 /* Overlay / start screen */
 #overlay {
