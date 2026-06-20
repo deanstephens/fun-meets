@@ -366,6 +366,122 @@ body {
   color: #9a8d4a;
 }
 
+/* ---- Avatar calibration (dev) ---- */
+.calibrate {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 280px;
+  padding: 12px 14px;
+  background: rgba(12, 14, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  z-index: 9;
+  font-size: 13px;
+  color: #e6e7f5;
+}
+
+.calibrate[hidden] {
+  display: none;
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cal-head .ghost {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.cal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.cal-label {
+  width: 44px;
+  color: #9a9cc0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cal-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cal-btns .opt {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.cal-optsel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cal-optsel .ghost {
+  margin: 0;
+  padding: 2px 9px;
+}
+
+.cal-optsel b {
+  min-width: 80px;
+  text-align: center;
+}
+
+.cal-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+}
+
+.cal-slider input[type="range"] {
+  flex: 1;
+}
+
+.cal-slider b {
+  width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-sub {
+  margin: 10px 0 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a8cb0;
+}
+
+#cal-shoulders[hidden] {
+  display: none;
+}
+
+.cal-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9a9cc0;
+}
+
+.cal-note code {
+  color: #cdd3ff;
+}
+
 /* ---- Slash (/) actions menu ---- */
 .actions {
   position: absolute;
@@ -829,8 +945,11 @@ body {
 }
 
 /* Arms — always stick lines, kept separate from the body so they swing. */
+/* Arm pivots come from per-torso shoulder vars (--sh-y / --sh-lx / --sh-rx),
+   set by avatar.js from the calibrated shoulder position; defaults keep the
+   bare stick-figure shoulders. The arm is 5px wide, so left = pivot-x - 2.5. */
 .figure .arm {
-  top: 13px;
+  top: var(--sh-y, 13px);
   width: 5px;
   height: 25px;
   transform-origin: top center;
@@ -842,8 +961,8 @@ body {
   height: 100%;
 }
 
-.figure .arm-l { left: 31px; transform: rotate(-17deg); }
-.figure .arm-r { left: 44px; transform: rotate(17deg); }
+.figure .arm-l { left: calc(var(--sh-lx, 33.5px) - 2.5px); transform: rotate(-17deg); }
+.figure .arm-r { left: calc(var(--sh-rx, 46.5px) - 2.5px); transform: rotate(17deg); }
 
 /* Legs — stick line or a per-leg clothing PNG; each swings at the hip. */
 .figure .leg {
@@ -858,12 +977,14 @@ body {
 
 .figure .leg .stick { left: 1px; width: 6px; height: 100%; }
 
+/* The --ax / --ay / --as custom properties are per-outfit calibration offsets
+   (set by avatar.js from avatar-positions.js); they default to no-op. */
 .figure .leg .cloth {
   top: 0;
   left: 50%;
   height: 100%;
   width: auto;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translate(var(--ax, 0px), var(--ay, 0px)) scale(var(--as, 1));
 }
 
 /* Feet — shoe PNG riding at the bottom of each (swinging) leg. */
@@ -872,10 +993,12 @@ body {
   left: 50%;
   height: 15px;
   width: auto;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translate(var(--ax, 0px), var(--ay, 0px)) scale(var(--as, 1));
 }
 
-.figure .foot-l { transform: translateX(-50%) scaleX(-1); }
+.figure .foot-l {
+  transform: translateX(-50%) scaleX(-1) translate(var(--ax, 0px), var(--ay, 0px)) scale(var(--as, 1));
+}
 
 /* Torso — bare spine or a clothing PNG hanging from the neck. */
 .figure .torso { top: 6px; left: 50%; width: 0; }
@@ -885,7 +1008,7 @@ body {
   top: 0;
   width: 50px;
   height: auto;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translate(var(--ax, 0px), var(--ay, 0px)) scale(var(--as, 1));
 }
 
 /* Hat — large PNG resting on top of the head. */
@@ -895,7 +1018,7 @@ body {
   top: -30px;
   width: 152px;
   height: auto;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translate(var(--ax, 0px), var(--ay, 0px)) scale(var(--as, 1));
   pointer-events: none;
   z-index: 3; /* above the head circle */
 }
