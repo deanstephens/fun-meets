@@ -1251,7 +1251,8 @@ body {
 
 /* ---- Emotes (one-shot avatar animations) ---- */
 
-/* Jump — the whole avatar hops (position is on `translate`, transform is free). */
+/* Jump — the whole avatar hops (position is on `translate`, transform is free),
+   and the arms swing up as it rises and back down as it lands. */
 .tile.emote-jump { animation: emote-jump 0.9s ease; }
 @keyframes emote-jump {
   0%, 100% { transform: translateY(0); }
@@ -1259,6 +1260,22 @@ body {
   44% { transform: translateY(0); }
   60% { transform: translateY(-18px); }
   74% { transform: translateY(0); }
+}
+.tile.emote-jump .figure .arm-l { animation: emote-jump-arm-l 0.9s ease !important; }
+.tile.emote-jump .figure .arm-r { animation: emote-jump-arm-r 0.9s ease !important; }
+@keyframes emote-jump-arm-l {
+  0%, 100% { transform: rotate(-17deg); }
+  22% { transform: rotate(108deg); }  /* up at the big hop */
+  44% { transform: rotate(-17deg); }
+  60% { transform: rotate(92deg); }   /* up at the small hop */
+  74% { transform: rotate(-17deg); }
+}
+@keyframes emote-jump-arm-r {
+  0%, 100% { transform: rotate(17deg); }
+  22% { transform: rotate(-108deg); }
+  44% { transform: rotate(17deg); }
+  60% { transform: rotate(-92deg); }
+  74% { transform: rotate(17deg); }
 }
 
 /* Wave — head tilts, and (if bodies shown) the right arm raises and waves. */
