@@ -23,6 +23,32 @@
       <span class="timer-text">0:00</span>
     </div>
 
+    <!-- Poll creation form (shown via the create-poll action) -->
+    <div id="poll-create" class="poll-create" hidden>
+      <div class="poll-create-card">
+        <h2>New poll</h2>
+        <input id="poll-question" type="text" maxlength="120" placeholder="Question…" />
+        <input class="poll-opt-input" type="text" maxlength="60" placeholder="Option 1" />
+        <input class="poll-opt-input" type="text" maxlength="60" placeholder="Option 2" />
+        <input class="poll-opt-input" type="text" maxlength="60" placeholder="Option 3 (optional)" />
+        <input class="poll-opt-input" type="text" maxlength="60" placeholder="Option 4 (optional)" />
+        <div class="poll-create-actions">
+          <button id="poll-cancel" class="ghost">Cancel</button>
+          <button id="poll-submit" class="ghost">Create poll</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live poll results -->
+    <div id="poll" class="poll" hidden>
+      <header class="poll-head">
+        <span id="poll-q" class="poll-q"></span>
+        <button id="poll-end" class="ghost" aria-label="End poll">×</button>
+      </header>
+      <div id="poll-options" class="poll-options"></div>
+      <div id="poll-total" class="poll-total"></div>
+    </div>
+
     <!-- Room status bar, shown once joined -->
     <div id="topbar" class="topbar" hidden>
       <span class="room">Room <strong id="room-name">—</strong></span>

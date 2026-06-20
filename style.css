@@ -1336,6 +1336,165 @@ body {
   50% { background: var(--accent); }
 }
 
+/* ---- Polls ---- */
+.poll-create {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 20, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 11;
+}
+
+.poll-create[hidden] {
+  display: none;
+}
+
+.poll-create-card {
+  width: 320px;
+  max-width: 90vw;
+  padding: 18px;
+  background: rgba(16, 18, 38, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.poll-create-card h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.poll-create input {
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #eef0ff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.poll-create input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.poll-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.poll {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 280px;
+  max-width: 90vw;
+  padding: 12px 14px;
+  background: rgba(12, 14, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  z-index: 8;
+}
+
+.poll[hidden] {
+  display: none;
+}
+
+.poll-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.poll-q {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #eef0ff;
+}
+
+.poll-head .ghost {
+  margin: 0;
+  padding: 1px 9px;
+}
+
+.poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: transparent;
+  color: #eef0ff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.poll-option:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.poll-option.mine {
+  border-color: var(--accent);
+}
+
+.poll-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(108, 123, 255, 0.28);
+  transition: width 0.25s ease;
+  z-index: 0;
+}
+
+.poll-option.mine .poll-bar {
+  background: rgba(70, 210, 127, 0.3);
+}
+
+.poll-label {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.poll-count {
+  position: relative;
+  z-index: 1;
+  font-variant-numeric: tabular-nums;
+  color: #b9bce0;
+  font-size: 12px;
+}
+
+.poll-total {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #9a9cc0;
+  text-align: right;
+}
+
 /* ---- Emotes (one-shot avatar animations) ---- */
 
 /* Jump — the whole avatar hops (position is on `translate`, transform is free),

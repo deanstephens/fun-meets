@@ -46,6 +46,16 @@ const toastText = toastEl.querySelector(".toast-text");
 const timerEl = document.getElementById("timer");
 const timerEmoji = timerEl.querySelector(".timer-emoji");
 const timerText = timerEl.querySelector(".timer-text");
+const pollCreateEl = document.getElementById("poll-create");
+const pollQuestionInput = document.getElementById("poll-question");
+const pollOptInputs = [...document.querySelectorAll(".poll-opt-input")];
+const pollSubmitBtn = document.getElementById("poll-submit");
+const pollCancelBtn = document.getElementById("poll-cancel");
+const pollEl = document.getElementById("poll");
+const pollQEl = document.getElementById("poll-q");
+const pollOptionsEl = document.getElementById("poll-options");
+const pollTotalEl = document.getElementById("poll-total");
+const pollEndBtn = document.getElementById("poll-end");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
@@ -158,6 +168,7 @@ const ZONE_MUFFLED = 0.08;
 // so a newcomer's default doesn't clobber what the room already chose.
 let currentBg = "";
 let amHost = false;
+let myMeshId = ""; // our mesh peer id (used to key our poll vote)
 
 // Serverless board persistence: the shared board (background + cards + zones) is
 // snapshotted to localStorage so a room survives everyone leaving. The host
@@ -293,7 +304,7 @@ async function start() {
         peerCountEl.textContent = String(s.peerCount);
         dcCount.textContent = String(s.peerCount);
       }
-      if (s.myId) dcMyId.textContent = s.myId;
+      if (s.myId) { dcMyId.textContent = s.myId; myMeshId = s.myId; }
       if (typeof s.isHost === "boolean") {
         amHost = s.isHost;
         dcRole.textContent = s.isHost ? "host" : "guest";
@@ -345,6 +356,11 @@ async function start() {
         zones.forEach((z) => session.sendTo(id, zoneMessage(z)));
         const rem = timerRemaining();
         if (rem > 0) session.sendTo(id, { type: "timer", op: "start", remaining: rem });
+        if (poll) session.sendTo(id, {
+          type: "poll", op: "sync",
+          poll: { id: poll.id, question: poll.question, options: poll.options },
+          votes: [...poll.votes],
+        });
       }
     },
     // A peer told us where their tile is, or said something.
@@ -394,6 +410,8 @@ async function start() {
       } else if (data.type === "timer") {
         if (data.op === "start" && data.remaining > 0 && data.remaining <= 7200) setTimer(data.remaining, false);
         else if (data.op === "clear") stopTimer(false);
+      } else if (data.type === "poll") {
+        handlePollMessage(data);
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -1312,6 +1330,106 @@ function playBeep() {
   } catch (_) {}
 }
 
+// ---- Polls (shared question + live tally) ----
+
+let poll = null; // { id, question, options:[str], votes: Map<voterId, optionIndex> }
+
+function openPollCreate() {
+  pollQuestionInput.value = "";
+  pollOptInputs.forEach((i) => (i.value = ""));
+  pollCreateEl.hidden = false;
+  pollQuestionInput.focus();
+}
+
+function closePollCreate() {
+  pollCreateEl.hidden = true;
+}
+
+function submitPoll() {
+  const question = pollQuestionInput.value.trim().slice(0, 120);
+  const options = pollOptInputs.map((i) => i.value.trim().slice(0, 60)).filter(Boolean);
+  if (!question || options.length < 2) return; // need a question + at least 2 options
+  closePollCreate();
+  createPoll(question, options.slice(0, 6));
+}
+
+function createPoll(question, options) {
+  poll = { id: "p" + Math.random().toString(36).slice(2, 9), question, options, votes: new Map() };
+  renderPoll();
+  if (session) session.broadcast({ type: "poll", op: "create", poll: { id: poll.id, question, options } });
+}
+
+function votePoll(i) {
+  if (!poll || i < 0 || i >= poll.options.length) return;
+  poll.votes.set(myMeshId, i); // one vote each (re-voting moves it)
+  renderPoll();
+  if (session) session.broadcast({ type: "poll", op: "vote", id: poll.id, option: i, voter: myMeshId });
+}
+
+function closePoll(broadcast) {
+  const id = poll && poll.id;
+  poll = null;
+  pollEl.hidden = true;
+  if (broadcast && id && session) session.broadcast({ type: "poll", op: "close", id });
+}
+
+function renderPoll() {
+  if (!poll) { pollEl.hidden = true; return; }
+  pollEl.hidden = false;
+  pollQEl.textContent = poll.question;
+  const counts = poll.options.map(() => 0);
+  poll.votes.forEach((opt) => { if (opt >= 0 && opt < counts.length) counts[opt]++; });
+  const total = poll.votes.size;
+  const mine = poll.votes.get(myMeshId);
+  pollOptionsEl.innerHTML = "";
+  poll.options.forEach((text, i) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "poll-option" + (mine === i ? " mine" : "");
+    const bar = document.createElement("div");
+    bar.className = "poll-bar";
+    bar.style.width = (total ? Math.round((counts[i] / total) * 100) : 0) + "%";
+    const label = document.createElement("span");
+    label.className = "poll-label";
+    label.textContent = text;
+    const count = document.createElement("span");
+    count.className = "poll-count";
+    count.textContent = total ? `${counts[i]} · ${Math.round((counts[i] / total) * 100)}%` : "0";
+    row.append(bar, label, count);
+    row.addEventListener("click", () => votePoll(i));
+    pollOptionsEl.appendChild(row);
+  });
+  pollTotalEl.textContent = total === 1 ? "1 vote" : `${total} votes`;
+}
+
+// Build/replace the active poll from a (possibly untrusted) message.
+function setPollFromData(p, votes) {
+  const question = String(p.question == null ? "" : p.question).slice(0, 120);
+  const options = Array.isArray(p.options)
+    ? p.options.slice(0, 6).map((o) => String(o).slice(0, 60)).filter(Boolean) : [];
+  if (!question || options.length < 2) return;
+  poll = { id: String(p.id || ""), question, options, votes: new Map() };
+  (Array.isArray(votes) ? votes : []).forEach((v) => {
+    if (Array.isArray(v) && v[1] >= 0 && v[1] < options.length) poll.votes.set(String(v[0]), v[1]);
+  });
+  renderPoll();
+}
+
+function handlePollMessage(data) {
+  if (data.op === "create" && data.poll) {
+    setPollFromData(data.poll, []);
+  } else if (data.op === "sync" && data.poll) {
+    setPollFromData(data.poll, data.votes);
+  } else if (data.op === "vote" && poll && data.id === poll.id) {
+    if (data.option >= 0 && data.option < poll.options.length && data.voter) {
+      poll.votes.set(String(data.voter), data.option);
+      renderPoll();
+    }
+  } else if (data.op === "close" && poll && data.id === poll.id) {
+    closePoll(false);
+  }
+}
+
 // ---- Emotes (one-shot avatar animations) ----
 
 function playEmote(name) {
@@ -1504,6 +1622,18 @@ const ACTIONS = [
     label: "Stop timer",
     description: "Clear the shared countdown",
     run: () => stopTimer(true),
+  },
+  {
+    id: "create-poll",
+    label: "Create poll",
+    description: "Ask a question with options — everyone votes",
+    run: openPollCreate,
+  },
+  {
+    id: "close-poll",
+    label: "Close poll",
+    description: "End the active poll",
+    run: () => closePoll(true),
   },
   {
     id: "create-card",
@@ -2245,6 +2375,17 @@ usernameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); start(); }
 });
 copyLinkBtn.addEventListener("click", copyInviteLink);
+// Poll creation form + results panel.
+pollSubmitBtn.addEventListener("click", submitPoll);
+pollCancelBtn.addEventListener("click", closePollCreate);
+pollEndBtn.addEventListener("click", () => closePoll(true));
+[pollQuestionInput, ...pollOptInputs].forEach((inp) => {
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitPoll(); }
+    else if (e.key === "Escape") { e.preventDefault(); closePollCreate(); }
+  });
+});
+pollCreateEl.addEventListener("click", (e) => { if (e.target === pollCreateEl) closePollCreate(); });
 toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
