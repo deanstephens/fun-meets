@@ -121,9 +121,16 @@ const emojiState = loadEmoji();
 let lastTrail = 0;
 const TRAIL_INTERVAL = 130; // ms between trail drops while moving
 
-// Cards dropped on the shared board: id -> { id, nx, ny, text, el, ta, sendTimer }.
+// Cards dropped on the shared board:
+//   id -> { id, nx, ny, text, color, author, el, ta, authorEl, sendTimer }
 const cards = new Map();
 const CARD_MAX = 500;
+// Sticky-note colours (key -> background). Keys are what's synced.
+const CARD_COLORS = ["yellow", "pink", "green", "blue", "purple"];
+const CARD_BG = {
+  yellow: "#fff3b0", pink: "#ffc6d9", green: "#c4f0c5", blue: "#bfe3ff", purple: "#e3cffb",
+};
+let cardDrag = null; // in-progress card drag state
 
 // Huddle/breakout zones: id -> { id, cx, cy, r, el }. People in the same zone
 // hear each other clearly; everyone else is muffled.
@@ -367,6 +374,8 @@ async function start() {
         applyBackground(sanitizeBg(data.css));
       } else if (data.type === "card" && data.op === "upsert" && data.card) {
         upsertCard(data.card, false);
+      } else if (data.type === "card" && data.op === "delete" && data.id) {
+        deleteCard(String(data.id), false);
       } else if (data.type === "zone") {
         if (data.op === "upsert" && data.zone) upsertZone(data.zone);
         else if (data.op === "clear") clearZones(false);
@@ -1378,7 +1387,7 @@ function snapshotBoard() {
   return {
     v: 1,
     bg: currentBg,
-    cards: [...cards.values()].map((c) => ({ id: c.id, nx: c.nx, ny: c.ny, text: c.text })),
+    cards: [...cards.values()].map((c) => ({ id: c.id, nx: c.nx, ny: c.ny, text: c.text, color: c.color, author: c.author })),
     zones: [...zones.values()].map((z) => ({ id: z.id, cx: z.cx, cy: z.cy, r: z.r })),
   };
 }
@@ -1458,7 +1467,10 @@ function importBoard() {
 }
 
 function cardMessage(c) {
-  return { type: "card", op: "upsert", card: { id: c.id, nx: c.nx, ny: c.ny, text: c.text } };
+  return {
+    type: "card", op: "upsert",
+    card: { id: c.id, nx: c.nx, ny: c.ny, text: c.text, color: c.color, author: c.author },
+  };
 }
 
 function broadcastCard(c) {
@@ -1472,6 +1484,8 @@ function createCardAtMe() {
     nx: clamp01(center.x / stage.clientWidth),
     ny: clamp01(center.y / stage.clientHeight),
     text: "",
+    color: "yellow",
+    author: username,
   };
   upsertCard(card, true);
   broadcastCard(cards.get(card.id));
@@ -1485,31 +1499,128 @@ function upsertCard(data, focus) {
   const nx = clamp01(Number(data.nx) || 0);
   const ny = clamp01(Number(data.ny) || 0);
   const text = String(data.text == null ? "" : data.text).slice(0, CARD_MAX);
+  const color = CARD_BG[data.color] ? data.color : "yellow";
+  const author = sanitizeName(data.author);
 
   let card = cards.get(id);
   if (!card) {
     const el = document.createElement("div");
     el.className = "card";
+
+    // Header doubles as a drag handle and holds the author + tools.
+    const head = document.createElement("div");
+    head.className = "card-head";
+    const authorEl = document.createElement("span");
+    authorEl.className = "card-author";
+    const tools = document.createElement("div");
+    tools.className = "card-tools";
+    CARD_COLORS.forEach((key) => {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "card-color";
+      dot.dataset.color = key;
+      dot.style.background = CARD_BG[key];
+      dot.title = "Recolour";
+      dot.addEventListener("click", () => recolorCard(id, key, true));
+      tools.appendChild(dot);
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "card-delete";
+    del.textContent = "×";
+    del.title = "Delete card";
+    del.addEventListener("click", () => deleteCard(id, true));
+    tools.append(del);
+    head.append(authorEl, tools);
+    head.addEventListener("pointerdown", (e) => startCardDrag(e, id));
+
     const ta = document.createElement("textarea");
     ta.className = "card-text";
     ta.maxLength = CARD_MAX;
     ta.placeholder = "Type…";
     ta.addEventListener("input", () => onCardInput(id));
     ta.addEventListener("blur", () => broadcastCard(cards.get(id)));
-    el.appendChild(ta);
+
+    el.append(head, ta);
     cardLayer.appendChild(el);
-    card = { id, nx, ny, text, el, ta, sendTimer: null };
+    card = { id, nx, ny, text, color, author, el, ta, authorEl, sendTimer: null };
     cards.set(id, card);
   }
 
   card.nx = nx;
   card.ny = ny;
   card.text = text;
+  card.color = color;
+  if (author) card.author = author;
+  applyCardColor(card);
+  card.authorEl.textContent = card.author || "";
+  card.authorEl.title = card.author ? "by " + card.author : "";
   // Don't clobber the editor's caret while it's being edited locally.
   if (document.activeElement !== card.ta && card.ta.value !== text) card.ta.value = text;
   positionCard(card);
   if (focus) card.ta.focus();
   saveBoard();
+}
+
+function applyCardColor(card) {
+  card.el.style.background = CARD_BG[card.color] || CARD_BG.yellow;
+  card.el.querySelectorAll(".card-color").forEach((d) => {
+    d.classList.toggle("sel", d.dataset.color === card.color);
+  });
+}
+
+function recolorCard(id, color, broadcast) {
+  const card = cards.get(id);
+  if (!card || !CARD_BG[color]) return;
+  card.color = color;
+  applyCardColor(card);
+  if (broadcast) broadcastCard(card);
+  saveBoard();
+}
+
+function deleteCard(id, broadcast) {
+  const card = cards.get(id);
+  if (!card) return;
+  card.el.remove();
+  cards.delete(id);
+  if (broadcast && session) session.broadcast({ type: "card", op: "delete", id });
+  saveBoard();
+}
+
+// ---- Card dragging (move) ----
+
+function startCardDrag(e, id) {
+  if (e.target.closest("button")) return; // a tool click, not a drag
+  const card = cards.get(id);
+  if (!card) return;
+  e.preventDefault();
+  const rect = stage.getBoundingClientRect();
+  const cx = card.nx * stage.clientWidth;
+  const cy = card.ny * stage.clientHeight;
+  cardDrag = { id, offX: e.clientX - rect.left - cx, offY: e.clientY - rect.top - cy, last: 0 };
+  card.el.classList.add("dragging");
+  window.addEventListener("pointermove", onCardDragMove);
+  window.addEventListener("pointerup", onCardDragEnd, { once: true });
+}
+
+function onCardDragMove(e) {
+  if (!cardDrag) return;
+  const card = cards.get(cardDrag.id);
+  if (!card) return;
+  const rect = stage.getBoundingClientRect();
+  card.nx = clamp01((e.clientX - rect.left - cardDrag.offX) / stage.clientWidth);
+  card.ny = clamp01((e.clientY - rect.top - cardDrag.offY) / stage.clientHeight);
+  positionCard(card);
+  const now = e.timeStamp || 0;
+  if (now - cardDrag.last > 80) { cardDrag.last = now; broadcastCard(card); }
+}
+
+function onCardDragEnd() {
+  window.removeEventListener("pointermove", onCardDragMove);
+  if (!cardDrag) return;
+  const card = cards.get(cardDrag.id);
+  cardDrag = null;
+  if (card) { card.el.classList.remove("dragging"); broadcastCard(card); saveBoard(); }
 }
 
 function onCardInput(id) {
