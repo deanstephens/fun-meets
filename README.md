@@ -185,10 +185,10 @@ The long-term direction is to grow the meeting from "a call you can move your we
   removes the peer immediately.)
 
 ### Milestone 23 — Settings moved to a side panel ✅
-- The room/AV toggles (**Hide bodies**, **Auto-frame**, **Spatial audio**,
-  **Share screen**) moved off the crowded top bar into a dedicated **Settings**
-  section in the right sidebar, so the top bar stays focused on room status and
-  there's room to grow.
+- The configuration toggles (**Hide bodies**, **Auto-frame**, **Spatial audio**)
+  moved off the crowded top bar into a dedicated **Settings** section in the
+  right sidebar. The top bar keeps room status, the invite link, and **Share
+  screen** (an action rather than a setting).
 
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
