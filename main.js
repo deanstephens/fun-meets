@@ -131,6 +131,13 @@ const CARD_BG = {
   yellow: "#fff3b0", pink: "#ffc6d9", green: "#c4f0c5", blue: "#bfe3ff", purple: "#e3cffb",
 };
 let cardDrag = null; // in-progress card drag state
+
+// One-shot avatar emotes (name -> animation duration ms). Played locally and
+// broadcast so everyone sees them; rate-limited on send and receive.
+const EMOTES = { wave: 1300, jump: 900, dance: 1800 };
+const EMOTE_COOLDOWN = 700;
+let lastEmoteAt = 0;
+const peerEmoteAt = new Map(); // peerId -> last emote time (receive throttle)
 let heldCardId = null; // card our avatar is carrying (toggle with E)
 const CARRY_SIDE_OFFSET = 0.36; // held card offset to the facing side (×tile size)
 const CARRY_HAND_OFFSET = 0.52; // held card offset below the head (~hand height)
@@ -374,6 +381,13 @@ async function start() {
           spawnThrow(emojiLayer, emoji, c.x, c.y,
             clamp01(data.nx) * stage.clientWidth, clamp01(data.ny) * stage.clientHeight);
         }
+      } else if (data.type === "emote") {
+        const name = typeof data.name === "string" ? data.name : "";
+        if (!EMOTES[name]) return; // unknown emote — ignore
+        const now = Date.now();
+        if (now - (peerEmoteAt.get(id) || 0) < EMOTE_COOLDOWN) return; // throttle
+        peerEmoteAt.set(id, now);
+        showEmote(ensureRemoteTile(id).el, name);
       } else if (data.type === "background") {
         applyBackground(sanitizeBg(data.css));
       } else if (data.type === "card" && data.op === "upsert" && data.card) {
@@ -388,6 +402,7 @@ async function start() {
       }
     },
   });
+  window.__mesh = session; // debug/inspection handle
 
   if (CALIBRATE) initCalibration();
 }
@@ -516,7 +531,7 @@ function applyRemotePosition(id) {
   const p = remotePositions.get(id);
   if (!tile || !p) return;
   const { mx, my } = movableArea();
-  tile.el.style.transform = `translate(${p.nx * mx}px, ${p.ny * my}px)`;
+  tile.el.style.translate = `${p.nx * mx}px ${p.ny * my}px`;
 }
 
 // Fallback layout for a tile we haven't received a position for yet.
@@ -527,7 +542,7 @@ function placeRemote(el) {
   const idx = remoteSlot++;
   const x = gap + (idx % cols) * (size + gap);
   const y = gap + Math.floor(idx / cols) * (size + gap);
-  el.style.transform = `translate(${x}px, ${y}px)`;
+  el.style.translate = `${x}px ${y}px`;
 }
 
 // Create the tile for a peer if it doesn't exist yet. A tile can appear before
@@ -665,7 +680,9 @@ function clampPosition() {
 }
 
 function applyPosition() {
-  selfTile.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+  // Position via the `translate` property so `transform` stays free for one-shot
+  // emote animations (jump etc.).
+  selfTile.style.translate = `${pos.x}px ${pos.y}px`;
 }
 
 function loop(timestamp) {
@@ -1145,9 +1162,31 @@ function remoteCenter(id) {
     return { x: p.nx * mx + ts / 2, y: p.ny * my + ts / 2 };
   }
   const tile = remoteTiles.get(id);
-  const m = tile && /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(tile.el.style.transform || "");
+  const m = tile && /([-\d.]+)px\s+([-\d.]+)px/.exec(tile.el.style.translate || "");
   if (m) return { x: parseFloat(m[1]) + ts / 2, y: parseFloat(m[2]) + ts / 2 };
   return { x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
+}
+
+// ---- Emotes (one-shot avatar animations) ----
+
+function playEmote(name) {
+  if (!EMOTES[name]) return;
+  const now = Date.now();
+  if (now - lastEmoteAt < EMOTE_COOLDOWN) return; // rate-limit
+  lastEmoteAt = now;
+  showEmote(selfTile, name);
+  if (session) session.broadcast({ type: "emote", name });
+}
+
+function showEmote(tileEl, name) {
+  const dur = EMOTES[name];
+  if (!dur) return;
+  // Clear any in-flight emote and reflow so the animation restarts cleanly.
+  Object.keys(EMOTES).forEach((n) => tileEl.classList.remove("emote-" + n));
+  void tileEl.offsetWidth;
+  tileEl.classList.add("emote-" + name);
+  clearTimeout(tileEl.__emoteTimer);
+  tileEl.__emoteTimer = setTimeout(() => tileEl.classList.remove("emote-" + name), dur);
 }
 
 function showerEmoji(emoji) {
@@ -1267,6 +1306,24 @@ function toggleBgPanel() {
 // ---- Actions (slash menu) ----
 
 const ACTIONS = [
+  {
+    id: "wave",
+    label: "Wave",
+    description: "Wave hello — everyone sees your avatar do it",
+    run: () => playEmote("wave"),
+  },
+  {
+    id: "jump",
+    label: "Jump",
+    description: "Hop up and down",
+    run: () => playEmote("jump"),
+  },
+  {
+    id: "dance",
+    label: "Dance",
+    description: "Bust a little move",
+    run: () => playEmote("dance"),
+  },
   {
     id: "create-card",
     label: "Create card",
