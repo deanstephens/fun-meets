@@ -136,8 +136,15 @@ The long-term direction is to grow the meeting from "a call you can move your we
   (no extra bandwidth), with a threshold + hold so it doesn't flicker between
   words.
 
+### Milestone 17 — Screen sharing ✅
+- Share a screen or window (**Share screen** in the topbar); it appears as a
+  large screen panel at the top of the board that everyone can gather around,
+  labelled with the sharer. Sent over a separate WebRTC media call (so it's
+  independent of the webcam), reaches late joiners, and clears for everyone when
+  you stop.
+
 ### Future milestones
-- More actions; move/delete cards. Mini-games, screen share, emotes, and more (see the open issues).
+- More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
 - Resilience: host re-election if the entry-point peer leaves, and reconnection after transient network drops.
 
@@ -151,7 +158,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–16 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, and a talking indicator.
+🚧 Early development. Milestones 1–17 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, and screen sharing.
 
 ## Getting Started
 

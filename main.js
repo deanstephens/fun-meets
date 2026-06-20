@@ -41,6 +41,8 @@ const copyLinkBtn = document.getElementById("copy-link");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
+const toggleScreenBtn = document.getElementById("toggle-screen");
+const screenLayer = document.getElementById("screen-layer");
 const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
 const chatInput = document.getElementById("chat-input");
@@ -161,6 +163,10 @@ window.__spatialAudio = spatialAudio; // debug/inspection handle
 const voiceActivity = createVoiceActivity();
 window.__voiceActivity = voiceActivity; // debug/inspection handle
 
+// Screen sharing: our outgoing screen stream + a panel per shared screen.
+let screenStream = null;
+const screens = new Map(); // id ("self" or peerId) -> { el, video }
+
 // id -> { el, head, video, veil } for each known remote participant.
 const remoteTiles = new Map();
 // id -> { nx, ny } latest normalized position broadcast by that peer.
@@ -184,6 +190,12 @@ async function start() {
   errorEl.hidden = true;
   startBtn.disabled = true;
   startBtn.textContent = "Requesting camera…";
+
+  // Start the audio contexts now, inside this click gesture — iOS Safari won't
+  // let an AudioContext run if it's first created later (when a peer's stream
+  // arrives), which would otherwise leave peers silent on iPad/iPhone.
+  spatialAudio.resume();
+  voiceActivity.resume();
 
   // Lock in the chosen display name before joining.
   username = sanitizeName(usernameInput.value) || username;
@@ -252,6 +264,8 @@ async function start() {
       }
     },
     onPeerStream: (id, stream) => addRemoteStream(id, stream),
+    onScreenStream: (id, stream) => renderScreen(id, stream, displayName(id), false),
+    onScreenStop: (id) => removeScreen(id),
     onPeerLeft: (id) => {
       removeRemoteTile(id);
       peerStatuses.delete(id);
@@ -328,6 +342,8 @@ async function start() {
       } else if (data.type === "zone") {
         if (data.op === "upsert" && data.zone) upsertZone(data.zone);
         else if (data.op === "clear") clearZones(false);
+      } else if (data.type === "screen" && data.op === "stop") {
+        removeScreen(id);
       }
     },
   });
@@ -1364,6 +1380,85 @@ function toggleSpatial() {
   updateSpatialBtn();
 }
 
+// ---- Screen sharing ----
+
+function renderScreen(id, stream, label, isSelf) {
+  let s = screens.get(id);
+  if (!s) {
+    const el = document.createElement("div");
+    el.className = "screen";
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+    if (isSelf) video.muted = true; // don't echo our own shared audio
+    const lbl = document.createElement("div");
+    lbl.className = "screen-label";
+    lbl.textContent = (label || "Someone") + " is sharing";
+    el.append(video, lbl);
+    screenLayer.appendChild(el);
+    s = { el, video };
+    screens.set(id, s);
+  }
+  s.video.srcObject = stream;
+}
+
+function removeScreen(id) {
+  const s = screens.get(id);
+  if (!s) return;
+  try { s.video.srcObject = null; } catch (_) {}
+  s.el.remove();
+  screens.delete(id);
+}
+
+async function startSharing(stream) {
+  if (!stream || screenStream) return;
+  screenStream = stream;
+  renderScreen("self", stream, "You", true); // show our own share
+  if (session) session.startScreen(stream);
+  // If the user ends the share via the browser's own UI, react to it.
+  const track = stream.getVideoTracks()[0];
+  if (track) track.addEventListener("ended", stopSharing, { once: true });
+  updateScreenBtn();
+}
+
+function stopSharing() {
+  if (!screenStream) return;
+  if (session) {
+    session.stopScreen();
+    // Tell peers explicitly — PeerJS media close() doesn't reliably reach them.
+    session.broadcast({ type: "screen", op: "stop" });
+  }
+  screenStream.getTracks().forEach((t) => { try { t.stop(); } catch (_) {} });
+  screenStream = null;
+  removeScreen("self");
+  updateScreenBtn();
+}
+
+async function toggleScreen() {
+  if (screenStream) { stopSharing(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    console.warn("[screen] getDisplayMedia not supported");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    startSharing(stream);
+  } catch (_) {
+    // user cancelled the picker or permission denied
+  }
+}
+
+function updateScreenBtn() {
+  const sharing = !!screenStream;
+  toggleScreenBtn.textContent = sharing ? "Stop sharing" : "Share screen";
+  toggleScreenBtn.classList.toggle("active", sharing);
+}
+
+// Test hook: start/stop a screen share with a provided stream (bypasses the
+// getDisplayMedia picker, which can't run in automated tests).
+window.__shareScreen = (stream) => startSharing(stream);
+window.__stopScreen = () => stopSharing();
+
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running) return;
@@ -1391,6 +1486,12 @@ copyLinkBtn.addEventListener("click", copyInviteLink);
 toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
+toggleScreenBtn.addEventListener("click", toggleScreen);
+// Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
+// so hide the button there rather than leave a control that does nothing.
+if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
+  toggleScreenBtn.hidden = true;
+}
 spatialAudio.setEnabled(spatialOn);
 updateSpatialBtn();
 chatForm.addEventListener("submit", sendChat);
@@ -1424,6 +1525,7 @@ window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
 window.addEventListener("beforeunload", () => {
+  if (screenStream) stopSharing();
   if (session) session.leave();
   if (faceFramer) faceFramer.stop();
 });

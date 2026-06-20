@@ -20,6 +20,7 @@
       <button id="toggle-body" class="ghost">Hide bodies</button>
       <button id="toggle-frame" class="ghost">Auto-frame: On</button>
       <button id="toggle-spatial" class="ghost">Spatial audio: On</button>
+      <button id="toggle-screen" class="ghost">Share screen</button>
     </div>
 
     <!-- Your movable webcam tile (the .head is the webcam; the stick-figure
@@ -32,6 +33,9 @@
     </div>
 
     <!-- Remote peer tiles are added here dynamically -->
+
+    <!-- Shared screens render here, near the top of the board -->
+    <div id="screen-layer" class="screen-layer"></div>
 
     <!-- Cards dropped on the board render here -->
     <div id="card-layer" class="card-layer"></div>

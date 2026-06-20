@@ -245,6 +245,48 @@ body {
   width: 100%;
 }
 
+/* ---- Shared screens ---- */
+.screen-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 14px;
+  max-width: 94vw;
+  z-index: 4; /* prominent, above avatars */
+  pointer-events: none;
+}
+
+.screen-layer:empty {
+  display: none;
+}
+
+.screen {
+  width: min(1080px, 88vw);
+  background: #000;
+  border: 2px solid rgba(108, 123, 255, 0.7);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.screen video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+}
+
+.screen-label {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dfe1f2;
+  background: rgba(108, 123, 255, 0.25);
+}
+
 /* ---- Huddle / breakout zones ---- */
 .zone-layer {
   position: absolute;
