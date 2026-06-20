@@ -1289,6 +1289,53 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ---- Shared countdown timer ---- */
+.timer {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  background: rgba(12, 14, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  z-index: 8;
+}
+
+.timer[hidden] {
+  display: none;
+}
+
+.timer-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.timer-text {
+  font-size: 17px;
+  font-weight: 700;
+  color: #eef0ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer.done {
+  border-color: var(--accent);
+  animation: timer-done 0.5s ease-in-out 4;
+}
+
+.timer.done .timer-text {
+  color: #fff;
+}
+
+@keyframes timer-done {
+  0%, 100% { background: rgba(12, 14, 32, 0.92); }
+  50% { background: var(--accent); }
+}
+
 /* ---- Emotes (one-shot avatar animations) ---- */
 
 /* Jump — the whole avatar hops (position is on `translate`, transform is free),
