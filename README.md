@@ -145,11 +145,12 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ### Milestone 18 — Avatar calibration mode (dev tooling) ✅
 - A developer-only calibration mode (`?calibrate=1`) to fine-tune the per-outfit
-  offset/scale of each avatar part with live preview, then **export** the
-  adjustments to JSON and apply them back into the repo with
-  `node scripts/apply-avatar-positions.js <file>` (writing `avatar-positions.js`,
-  the committed source of truth that `avatar.js` reads at runtime). Hidden and
-  no-op for normal users.
+  offset/scale of each avatar part with live preview — and, for tops, the
+  **shoulder (arm pivot) position** so the arms come out of each top's
+  armholes. **Export** the adjustments to JSON and apply them back into the repo
+  with `node scripts/apply-avatar-positions.js <file>` (writing
+  `avatar-positions.js`, the committed source of truth that `avatar.js` reads at
+  runtime). Hidden and no-op for normal users.
 
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).

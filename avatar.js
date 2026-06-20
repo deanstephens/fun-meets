@@ -26,6 +26,24 @@ export function applyAdjust(el, slot, key) {
   if (a.scale != null && a.scale !== 1) el.style.setProperty("--as", String(a.scale));
 }
 
+// Per-torso shoulder (arm pivot) defaults, in the figure's local coords; the
+// figure is 80px wide so the centre is 40. sx is the half-spread, sy the height.
+export const SHOULDER_CENTER = 40;
+export const SHOULDER_SX = 6.5;
+export const SHOULDER_SY = 13;
+
+// Set the arm-pivot (shoulder) position on the figure from the body outfit's
+// calibrated sx/sy. The arms (figure children) read --sh-lx/--sh-rx/--sh-y.
+export function applyShoulders(fig, bodyOption) {
+  const a = AVATAR_POSITIONS.body && AVATAR_POSITIONS.body[bodyOption];
+  if (!a) return;
+  if (a.sx != null) {
+    fig.style.setProperty("--sh-lx", SHOULDER_CENTER - a.sx + "px");
+    fig.style.setProperty("--sh-rx", SHOULDER_CENTER + a.sx + "px");
+  }
+  if (a.sy != null) fig.style.setProperty("--sh-y", a.sy + "px");
+}
+
 export const AVATAR_OPTIONS = {
   hat: ["none", "pirate", "tophat", "crown", "beanie", "cowboy", "wizard"],
   body: ["none", "tshirt", "hoodie", "tux", "dress", "striped", "overalls",
@@ -106,6 +124,7 @@ export function buildFigure(cfg) {
     const cloth = asset("body", cfg.body, "cloth");
     applyAdjust(cloth, "body", cfg.body);
     torso.appendChild(cloth);
+    applyShoulders(fig, cfg.body); // move the arm pivots to this top's shoulders
   }
   fig.appendChild(torso);
 

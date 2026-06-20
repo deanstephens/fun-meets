@@ -64,6 +64,11 @@
       <label class="cal-slider">X <input id="cal-x" type="range" min="-60" max="60" step="1" value="0" /><b id="cal-x-val">0</b></label>
       <label class="cal-slider">Y <input id="cal-y" type="range" min="-60" max="60" step="1" value="0" /><b id="cal-y-val">0</b></label>
       <label class="cal-slider">Scale <input id="cal-s" type="range" min="0.3" max="2.5" step="0.01" value="1" /><b id="cal-s-val">1.00</b></label>
+      <div id="cal-shoulders" hidden>
+        <div class="cal-sub">Shoulders (arm pivots)</div>
+        <label class="cal-slider">Spread <input id="cal-sx" type="range" min="0" max="22" step="0.5" value="6.5" /><b id="cal-sx-val">6.5</b></label>
+        <label class="cal-slider">Height <input id="cal-sy" type="range" min="-6" max="34" step="0.5" value="13" /><b id="cal-sy-val">13</b></label>
+      </div>
       <p class="cal-note">Adjust, then <b>Export JSON</b> and run <code>node scripts/apply-avatar-positions.js &lt;file&gt;</code>.</p>
     </div>
 

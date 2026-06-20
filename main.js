@@ -14,7 +14,7 @@
 import { joinRoom } from "./mesh.js";
 import {
   AVATAR_OPTIONS, SLOT_LABELS, OPTION_LABELS, DEFAULT_AVATAR,
-  normalizeAvatar, applyAvatar,
+  normalizeAvatar, applyAvatar, SHOULDER_CENTER, SHOULDER_SX, SHOULDER_SY,
 } from "./avatar.js";
 import { AVATAR_POSITIONS } from "./avatar-positions.js";
 import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
@@ -873,6 +873,11 @@ function initCalibration() {
   const xVal = document.getElementById("cal-x-val");
   const yVal = document.getElementById("cal-y-val");
   const sVal = document.getElementById("cal-s-val");
+  const shouldersEl = document.getElementById("cal-shoulders");
+  const sxIn = document.getElementById("cal-sx");
+  const syIn = document.getElementById("cal-sy");
+  const sxVal = document.getElementById("cal-sx-val");
+  const syVal = document.getElementById("cal-sy-val");
 
   const SLOTS = Object.keys(AVATAR_OPTIONS);
   // Working copy seeded from the committed adjustments.
@@ -910,10 +915,29 @@ function initCalibration() {
     });
   }
 
+  // Shoulders (arm pivots) — body slot only.
+  function shoulders() {
+    const a = adj();
+    if (a.sx == null) a.sx = SHOULDER_SX;
+    if (a.sy == null) a.sy = SHOULDER_SY;
+    return a;
+  }
+
+  function applyShoulderVars() {
+    const fig = selfTile.querySelector(".figure");
+    if (!fig) return;
+    const a = shoulders();
+    fig.style.setProperty("--sh-lx", SHOULDER_CENTER - a.sx + "px");
+    fig.style.setProperty("--sh-rx", SHOULDER_CENTER + a.sx + "px");
+    fig.style.setProperty("--sh-y", a.sy + "px");
+  }
+
   function syncLabels() {
     xVal.textContent = xIn.value;
     yVal.textContent = yIn.value;
     sVal.textContent = Number(sIn.value).toFixed(2);
+    sxVal.textContent = sxIn.value;
+    syVal.textContent = syIn.value;
   }
 
   function showOutfit() {
@@ -925,6 +949,14 @@ function initCalibration() {
     xIn.value = a.x;
     yIn.value = a.y;
     sIn.value = a.scale;
+    // Shoulder controls apply to tops only.
+    shouldersEl.hidden = curSlot !== "body";
+    if (curSlot === "body") {
+      const s = shoulders();
+      sxIn.value = s.sx;
+      syIn.value = s.sy;
+      applyShoulderVars();
+    }
     syncLabels();
     applyVars();
   }
@@ -936,6 +968,14 @@ function initCalibration() {
     a.scale = Number(sIn.value);
     syncLabels();
     applyVars();
+  }
+
+  function onSlideShoulder() {
+    const a = adj();
+    a.sx = Number(sxIn.value);
+    a.sy = Number(syIn.value);
+    syncLabels();
+    applyShoulderVars();
   }
 
   function selectSlot(slot) {
@@ -953,9 +993,13 @@ function initCalibration() {
         const x = a.x || 0;
         const y = a.y || 0;
         const scale = a.scale == null ? 1 : a.scale;
-        if (x !== 0 || y !== 0 || scale !== 1) {
-          (out[slot] = out[slot] || {})[o] = { x, y, scale };
+        const entry = {};
+        if (x !== 0 || y !== 0 || scale !== 1) Object.assign(entry, { x, y, scale });
+        if (slot === "body") {
+          if (a.sx != null && a.sx !== SHOULDER_SX) entry.sx = a.sx;
+          if (a.sy != null && a.sy !== SHOULDER_SY) entry.sy = a.sy;
         }
+        if (Object.keys(entry).length) (out[slot] = out[slot] || {})[o] = entry;
       }
     }
     const json = JSON.stringify(out, null, 2);
@@ -986,6 +1030,7 @@ function initCalibration() {
     showOutfit();
   });
   [xIn, yIn, sIn].forEach((el) => el.addEventListener("input", onSlide));
+  [sxIn, syIn].forEach((el) => el.addEventListener("input", onSlideShoulder));
   document.getElementById("cal-export").addEventListener("click", exportJson);
 
   panel.hidden = false;

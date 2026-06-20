@@ -12,6 +12,9 @@ const fs = require("fs");
 const path = require("path");
 
 const SLOTS = ["hat", "body", "legs", "feet"];
+// Default shoulder (arm pivot) half-spread / height for tops; matches avatar.js.
+const SHOULDER_SX = 6.5;
+const SHOULDER_SY = 13;
 
 function fail(msg) {
   console.error("error: " + msg);
@@ -28,19 +31,35 @@ try {
   fail("could not read/parse " + inFile + ": " + e.message);
 }
 
-// Validate + normalise: only known slots, numeric x/y/scale, drop no-op entries.
+// Validate + normalise: only known slots, numeric fields, drop no-op entries.
+// Each entry keeps only its non-default fields: x/y/scale for any slot, plus
+// sx/sy (shoulder spread/height) for body tops.
 const clean = {};
 let count = 0;
 for (const slot of Object.keys(raw)) {
   if (!SLOTS.includes(slot)) fail("unknown slot: " + slot);
   for (const opt of Object.keys(raw[slot] || {})) {
     const a = raw[slot][opt] || {};
+    const entry = {};
     const x = Number(a.x) || 0;
     const y = Number(a.y) || 0;
     const scale = a.scale == null ? 1 : Number(a.scale);
     if (!Number.isFinite(scale)) fail(`bad scale for ${slot}.${opt}`);
-    if (x === 0 && y === 0 && scale === 1) continue; // no-op
-    (clean[slot] = clean[slot] || {})[opt] = { x, y, scale };
+    if (x !== 0 || y !== 0 || scale !== 1) Object.assign(entry, { x, y, scale });
+    if (slot === "body") {
+      if (a.sx != null) {
+        const sx = Number(a.sx);
+        if (!Number.isFinite(sx)) fail(`bad sx for body.${opt}`);
+        if (sx !== SHOULDER_SX) entry.sx = sx;
+      }
+      if (a.sy != null) {
+        const sy = Number(a.sy);
+        if (!Number.isFinite(sy)) fail(`bad sy for body.${opt}`);
+        if (sy !== SHOULDER_SY) entry.sy = sy;
+      }
+    }
+    if (Object.keys(entry).length === 0) continue; // no-op
+    (clean[slot] = clean[slot] || {})[opt] = entry;
     count++;
   }
 }
@@ -51,7 +70,9 @@ const header = `// avatar-positions.js — per-outfit calibration offsets for av
 // calibration export (see the calibration mode, ?calibrate=1). Shape:
 //   slot ("hat"|"body"|"legs"|"feet") -> option -> { x, y, scale }
 // where x/y are pixels in the figure's local coordinate space and scale is a
-// multiplier (1 = unchanged). Missing entries default to no adjustment.
+// multiplier (1 = unchanged). Body tops may also carry shoulder (arm pivot)
+// values { sx, sy } — half-spread and height. Missing fields default to no
+// adjustment.
 export const AVATAR_POSITIONS = `;
 
 const out = header + JSON.stringify(clean, null, 2) + ";\n";

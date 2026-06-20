@@ -459,6 +459,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.cal-sub {
+  margin: 10px 0 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a8cb0;
+}
+
+#cal-shoulders[hidden] {
+  display: none;
+}
+
 .cal-note {
   margin: 8px 0 0;
   font-size: 11px;
@@ -933,8 +945,11 @@ body {
 }
 
 /* Arms — always stick lines, kept separate from the body so they swing. */
+/* Arm pivots come from per-torso shoulder vars (--sh-y / --sh-lx / --sh-rx),
+   set by avatar.js from the calibrated shoulder position; defaults keep the
+   bare stick-figure shoulders. The arm is 5px wide, so left = pivot-x - 2.5. */
 .figure .arm {
-  top: 13px;
+  top: var(--sh-y, 13px);
   width: 5px;
   height: 25px;
   transform-origin: top center;
@@ -946,8 +961,8 @@ body {
   height: 100%;
 }
 
-.figure .arm-l { left: 31px; transform: rotate(-17deg); }
-.figure .arm-r { left: 44px; transform: rotate(17deg); }
+.figure .arm-l { left: calc(var(--sh-lx, 33.5px) - 2.5px); transform: rotate(-17deg); }
+.figure .arm-r { left: calc(var(--sh-rx, 46.5px) - 2.5px); transform: rotate(17deg); }
 
 /* Legs — stick line or a per-leg clothing PNG; each swings at the hip. */
 .figure .leg {
