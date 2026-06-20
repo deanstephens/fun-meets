@@ -159,6 +159,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   angle are calibratable per-top alongside the shoulders (see the calibration
   mode).
 
+### Milestone 20 — Save & restore the board ✅
+- The shared board (background, cards, huddle zones) is snapshotted to
+  `localStorage` per room, so a room **survives everyone leaving** — when the
+  host returns to that room it restores automatically. Still fully serverless.
+- Two actions (the `/` menu): **Save board to file** downloads a JSON snapshot,
+  and **Load board from file** restores one and shares it with everyone in the
+  room.
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.

@@ -132,6 +132,15 @@ const ZONE_MUFFLED = 0.08;
 let currentBg = "";
 let amHost = false;
 
+// Serverless board persistence: the shared board (background + cards + zones) is
+// snapshotted to localStorage so a room survives everyone leaving. The host
+// restores it on return; nobody saves until the host/guest role has settled, so
+// the initial empty board never clobbers a saved one.
+let roomName = "";
+let boardSettled = false;
+let boardReady = false;
+let boardSaveTimer = null;
+
 // Local tile position (top-left corner, in stage pixels).
 const pos = { x: 0, y: 0 };
 
@@ -245,6 +254,7 @@ async function start() {
 
   // Join the mesh room.
   const room = getRoom();
+  roomName = room;
   roomNameEl.textContent = room;
   dcRoom.textContent = room;
   session = joinRoom({
@@ -259,6 +269,14 @@ async function start() {
       if (typeof s.isHost === "boolean") {
         amHost = s.isHost;
         dcRole.textContent = s.isHost ? "host" : "guest";
+        // Once our role settles: the host restores the saved board (it starts
+        // alone); a guest will get the live board from the host instead. Only
+        // now do we allow saving, so the empty start state can't overwrite it.
+        if (!boardSettled) {
+          boardSettled = true;
+          if (s.isHost) restoreSavedBoard();
+          boardReady = true;
+        }
       }
       if (s.error) {
         console.warn("[mesh] status error:", s.error);
@@ -1153,6 +1171,7 @@ function applyBackground(css) {
   currentBg = css || "";
   stage.style.background = currentBg; // "" falls back to the stylesheet gradient
   highlightBg();
+  saveBoard();
 }
 
 // Apply locally and share with the room.
@@ -1224,6 +1243,18 @@ const ACTIONS = [
     label: "Clear huddle zones",
     description: "Remove all huddle zones from the board",
     run: () => clearZones(true),
+  },
+  {
+    id: "save-board",
+    label: "Save board to file",
+    description: "Download a snapshot of the background, cards and zones",
+    run: exportBoard,
+  },
+  {
+    id: "load-board",
+    label: "Load board from file",
+    description: "Restore a board snapshot from a file (shared with everyone)",
+    run: importBoard,
   },
 ];
 
@@ -1319,6 +1350,95 @@ function runAction(a) {
 
 // ---- Cards ----
 
+// ---- Board persistence (serverless: localStorage + file snapshot) ----
+
+function boardKey() {
+  return "funmeets-board-" + roomName;
+}
+
+function snapshotBoard() {
+  return {
+    v: 1,
+    bg: currentBg,
+    cards: [...cards.values()].map((c) => ({ id: c.id, nx: c.nx, ny: c.ny, text: c.text })),
+    zones: [...zones.values()].map((z) => ({ id: z.id, cx: z.cx, cy: z.cy, r: z.r })),
+  };
+}
+
+// Debounced save of the current board to localStorage (per room).
+function saveBoard() {
+  if (!roomName || !boardReady) return;
+  if (boardSaveTimer) clearTimeout(boardSaveTimer);
+  boardSaveTimer = setTimeout(() => {
+    try { localStorage.setItem(boardKey(), JSON.stringify(snapshotBoard())); } catch (_) {}
+  }, 400);
+}
+
+// Apply a board snapshot (from storage or a file). When broadcast is true the
+// pieces are pushed to peers too (used for an imported file).
+function applySnapshot(snap, broadcast) {
+  if (!snap || typeof snap !== "object") return;
+  if (typeof snap.bg === "string") {
+    applyBackground(snap.bg);
+    if (broadcast && session) session.broadcast({ type: "background", css: currentBg });
+  }
+  if (Array.isArray(snap.cards)) {
+    snap.cards.forEach((c) => {
+      upsertCard(c);
+      if (broadcast) broadcastCard(cards.get(String(c.id)));
+    });
+  }
+  if (Array.isArray(snap.zones)) {
+    snap.zones.forEach((z) => {
+      upsertZone(z);
+      if (broadcast) broadcastZone(zones.get(String(z.id)));
+    });
+  }
+  saveBoard();
+}
+
+// Host-only, called when we (re)claim a room alone: bring the board back.
+function restoreSavedBoard() {
+  let snap = null;
+  try {
+    const raw = localStorage.getItem(boardKey());
+    if (raw) snap = JSON.parse(raw);
+  } catch (_) {}
+  if (snap) applySnapshot(snap, false); // we're alone, nobody to broadcast to
+}
+
+function exportBoard() {
+  const json = JSON.stringify(snapshotBoard(), null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "fun-meets-board-" + (roomName || "room") + ".json";
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+// Hidden file input reused for importing a board snapshot.
+const boardFileInput = document.createElement("input");
+boardFileInput.type = "file";
+boardFileInput.id = "board-file-input";
+boardFileInput.accept = "application/json,.json";
+boardFileInput.style.display = "none";
+boardFileInput.addEventListener("change", () => {
+  const file = boardFileInput.files && boardFileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { applySnapshot(JSON.parse(String(reader.result)), true); } catch (_) {}
+    boardFileInput.value = "";
+  };
+  reader.readAsText(file);
+});
+document.body.appendChild(boardFileInput);
+
+function importBoard() {
+  boardFileInput.click();
+}
+
 function cardMessage(c) {
   return { type: "card", op: "upsert", card: { id: c.id, nx: c.nx, ny: c.ny, text: c.text } };
 }
@@ -1371,6 +1491,7 @@ function upsertCard(data, focus) {
   if (document.activeElement !== card.ta && card.ta.value !== text) card.ta.value = text;
   positionCard(card);
   if (focus) card.ta.focus();
+  saveBoard();
 }
 
 function onCardInput(id) {
@@ -1379,6 +1500,7 @@ function onCardInput(id) {
   card.text = card.ta.value.slice(0, CARD_MAX);
   if (card.sendTimer) clearTimeout(card.sendTimer);
   card.sendTimer = setTimeout(() => broadcastCard(card), 300);
+  saveBoard();
 }
 
 function positionCard(card) {
@@ -1430,12 +1552,14 @@ function upsertZone(data) {
   z.cy = cy;
   z.r = r;
   positionZone(z);
+  saveBoard();
 }
 
 function clearZones(broadcast) {
   zones.forEach((z) => z.el.remove());
   zones.clear();
   if (broadcast && session) session.broadcast({ type: "zone", op: "clear" });
+  saveBoard();
 }
 
 function positionZone(z) {
