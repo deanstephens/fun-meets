@@ -76,6 +76,8 @@ export function createVoiceActivity(opts = {}) {
   function isSpeaking(id) { const e = entries.get(id); return !!(e && e.speaking); }
   function getLevel(id) { const e = entries.get(id); return e ? e.level : null; }
   function ids() { return [...entries.keys()]; }
+  // Create/resume the context; call from a user gesture (iOS requirement).
+  function resume() { ensureCtx(); }
 
-  return { addStream, removeStream, poll, isSpeaking, getLevel, ids };
+  return { addStream, removeStream, poll, isSpeaking, getLevel, ids, resume };
 }

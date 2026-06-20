@@ -191,6 +191,12 @@ async function start() {
   startBtn.disabled = true;
   startBtn.textContent = "Requesting camera…";
 
+  // Start the audio contexts now, inside this click gesture — iOS Safari won't
+  // let an AudioContext run if it's first created later (when a peer's stream
+  // arrives), which would otherwise leave peers silent on iPad/iPhone.
+  spatialAudio.resume();
+  voiceActivity.resume();
+
   // Lock in the chosen display name before joining.
   username = sanitizeName(usernameInput.value) || username;
   saveUsername();
@@ -1481,6 +1487,11 @@ toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
 toggleScreenBtn.addEventListener("click", toggleScreen);
+// Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
+// so hide the button there rather than leave a control that does nothing.
+if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
+  toggleScreenBtn.hidden = true;
+}
 spatialAudio.setEnabled(spatialOn);
 updateSpatialBtn();
 chatForm.addEventListener("submit", sendChat);

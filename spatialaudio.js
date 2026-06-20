@@ -66,6 +66,8 @@ export function createSpatialAudio() {
   function setEnabled(v) { enabled = !!v; }
   function getGain(id) { const p = peers.get(id); return p ? p.gain.gain.value : null; }
   function peerIds() { return [...peers.keys()]; }
+  // Create/resume the context; call from a user gesture (iOS won't start audio otherwise).
+  function resume() { ensureCtx(); }
 
-  return { addPeer, removePeer, update, setEnabled, getGain, peerIds };
+  return { addPeer, removePeer, update, setEnabled, getGain, peerIds, resume };
 }
