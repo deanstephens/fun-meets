@@ -152,6 +152,13 @@ The long-term direction is to grow the meeting from "a call you can move your we
   `avatar-positions.js`, the committed source of truth that `avatar.js` reads at
   runtime). Hidden and no-op for normal users.
 
+### Milestone 19 — Articulated arms (elbow joint) ✅
+- Each arm is now two segments — an **upper arm** and a **forearm** hinged at an
+  **elbow** — so the elbows bend as the arms pump during the walk cycle. Standing
+  still looks exactly as before (straight arms). The elbow position and resting
+  angle are calibratable per-top alongside the shoulders (see the calibration
+  mode).
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
