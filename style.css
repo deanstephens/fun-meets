@@ -248,9 +248,9 @@ body {
 /* ---- Shared screens ---- */
 .screen-layer {
   position: absolute;
-  top: 16px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   display: flex;
   gap: 14px;
   max-width: 94vw;
