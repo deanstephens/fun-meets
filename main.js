@@ -193,6 +193,7 @@ const POS_INTERVAL = 50; // ms between position updates while moving (~20Hz)
 
 const STATUS_TEXT = {
   connecting: "connecting…",
+  reconnecting: "reconnecting…",
   failed: "couldn’t connect",
   connected: "",
 };
@@ -567,6 +568,10 @@ function addRemoteStream(id, stream) {
   const tile = ensureRemoteTile(id);
   tile.video.srcObject = stream;
   tile.el.classList.add("has-video"); // hides the veil
+  // Re-add cleanly: on a reconnect this is a fresh stream for an existing peer,
+  // and addPeer/addStream no-op if the id is still registered.
+  spatialAudio.removePeer(id);
+  voiceActivity.removeStream(id);
   // Route the audio through spatial audio (distance-based volume).
   spatialAudio.addPeer(id, stream, tile.video);
   // Watch it for voice activity (talking ring).

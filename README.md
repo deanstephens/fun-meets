@@ -176,6 +176,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   on the slow WebRTC ICE timeout. Existing peers keep their direct connections
   throughout (no identity migration, no reconnect).
 
+### Milestone 22 — Reconnection after transient drops ✅
+- A brief media-connection blip (ICE `disconnected`/`failed`) no longer removes a
+  peer. The tile shows a **reconnecting** state (dimmed, amber dot) while ICE is
+  given a grace window to self-heal — and on an outright failure we **re-dial**
+  with backoff — recovering the peer if the network comes back. Only if it can't
+  recover within the window is the peer finally dropped. (A clean leave still
+  removes the peer immediately.)
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -192,7 +200,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–21 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), and host re-election when the entry-point peer leaves.
+🚧 Early development. Milestones 1–22 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), host re-election when the entry-point peer leaves, and reconnection that rides out transient network blips.
 
 ## Getting Started
 
