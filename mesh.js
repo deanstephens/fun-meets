@@ -69,8 +69,10 @@ const HOST_TIMEOUT_MS = 8000;
 
 // Reconnection: a media connection that drops out (ICE "disconnected"/"failed")
 // is given this long to recover — ICE often self-heals a brief blip, and we
-// also re-dial — before the peer is finally dropped.
-const RECONNECT_GRACE_MS = 8000;
+// also re-dial — before the peer is finally dropped. The grace is generous so a
+// real network blip (Wi-Fi re-associate + DHCP + broker reconnect, which can
+// take 10–20s) can recover rather than drop-and-rejoin.
+const RECONNECT_GRACE_MS = 25000;
 const RECONNECT_RETRY_MS = 3000;
 
 export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog, onScreenStream, onScreenStop }) {
@@ -253,14 +255,13 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
           clearDialTimeout(call.peer);
           clearReconnect(call.peer); // recovered (self-heal or re-dial)
           reportStatus(call.peer, "connected");
-        } else if (s === "disconnected") {
-          // Often a transient blip: ICE keeps probing and may recover on its
-          // own. Don't drop — show "reconnecting" and start the grace window.
-          if (state.everConnected.has(call.peer)) startReconnect(call.peer, false);
-        } else if (s === "failed") {
-          // ICE gave up on this path — actively re-dial within the grace window.
+        } else if (s === "disconnected" || s === "failed") {
+          // A blip. Show "reconnecting" and recover: ICE may self-heal, and we
+          // also re-dial (a quick self-heal cancels the re-dial before it
+          // fires). We re-dial on "disconnected" too, since a blip where our IP
+          // changed can sit there without ever reaching "failed".
           if (state.everConnected.has(call.peer)) startReconnect(call.peer, true);
-          else reportStatus(call.peer, "failed"); // never came up → just failed
+          else if (s === "failed") reportStatus(call.peer, "failed"); // never came up
         } else if (s === "closed") {
           // Only the current call closing, and not mid-reconnect, is a departure.
           if (state.calls.get(call.peer) === call &&
