@@ -188,10 +188,11 @@ The long-term direction is to grow the meeting from "a call you can move your we
 - Public PeerJS cloud broker for signaling only (no backend we operate)
 - Browser `getUserMedia` for webcam + mic capture
 - Keyboard input (WASD) for moving webcams around the canvas
+- Optional Node dev scripts to serve over HTTPS and run a local PeerJS broker on your LAN (see _Running locally over HTTPS_)
 
 ## Status
 
-🚧 Early development. Milestones 1–17 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies, chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, and screen sharing.
+🚧 Early development. Milestones 1–21 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), and host re-election when the entry-point peer leaves.
 
 ## Getting Started
 
@@ -206,3 +207,38 @@ python3 -m http.server 8000
 Click **Enable camera & join**, then share the URL (it contains a `?room=...` link, also available via the **Copy invite link** button) with others to bring them into the same room. Note that browsers require a **secure context** for camera access — `localhost` is treated as secure, but a hosted deployment must be served over **HTTPS**.
 
 > **Known limitation:** the public PeerJS broker provides STUN but no TURN server, so peers behind strict (symmetric) NATs may fail to connect directly. Adding a TURN server would resolve this but requires infrastructure.
+
+### Running locally over HTTPS on your LAN (optional)
+
+The app itself is just static files and uses the **public PeerJS cloud broker** by
+default — none of the below is needed to use it. But to test from other devices
+on your network (phones, other laptops) you need **HTTPS** (camera, screen share
+and `wss://` all require a secure context), and you can optionally run your own
+signaling broker so nothing touches the cloud. Bundled dev scripts handle both
+(they require Node + a one-time `npm install`):
+
+```bash
+npm install        # one-time: installs the dev-only tooling (peer, selfsigned)
+npm run certs      # generate a self-signed cert into .certs/
+                   #   (SAN covers localhost, 127.0.0.1, and your LAN IP)
+npm run dev        # start the HTTPS app server (:8443) + a local PeerJS broker (:9100)
+```
+
+(Or run them separately: `npm run serve` and `npm run broker`. `PORT`,
+`BROKER_PORT` and `BROKER_PATH` env vars override the defaults.)
+
+Then, on each device:
+
+1. Open **`https://<your-lan-ip>:8443/`** and **accept the self-signed cert
+   warning** (Chrome: type `thisisunsafe` on the warning page; Safari: *Show
+   Details → visit this website*). This is a one-time step per device.
+2. **To also use your local broker** (instead of the public cloud one) add
+   **`?broker=local`** to the URL — e.g. `https://<your-lan-ip>:8443/?room=demo&broker=local`.
+   The first time, also visit **`https://<your-lan-ip>:9100/myapp`** once and
+   accept that cert too, otherwise the browser silently blocks the `wss://`
+   connection. `?broker=local` points the app at a broker on the same host,
+   port `9100`, path `/myapp` — matching `npm run broker`.
+
+> These scripts are **development-only** (the `.certs/` directory is gitignored).
+> A real deployment just hosts the static files (e.g. GitHub Pages) and uses the
+> public broker — no server of ours, consistent with the project's principles.

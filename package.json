@@ -1,0 +1,17 @@
+{
+  "name": "fun-meets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serverless, peer-to-peer, game-like video meetings over WebRTC.",
+  "homepage": "https://deanstephens.github.io/fun-meets/",
+  "scripts": {
+    "certs": "node scripts/gen-certs.mjs",
+    "serve": "node scripts/serve.mjs",
+    "broker": "node scripts/broker.mjs",
+    "dev": "node scripts/dev.mjs"
+  },
+  "devDependencies": {
+    "peer": "^1.0.2",
+    "selfsigned": "^2.4.1"
+  }
+}
