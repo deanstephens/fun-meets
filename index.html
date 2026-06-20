@@ -43,6 +43,30 @@
     <!-- Emoji particles render here (pointer-events: none) -->
     <div id="emoji-layer" class="emoji-layer"></div>
 
+    <!-- Avatar calibration (dev only; shown with ?calibrate=1) -->
+    <div id="calibrate" class="calibrate" hidden>
+      <header class="cal-head">
+        <span>Avatar calibration</span>
+        <button id="cal-export" class="ghost">Export JSON</button>
+      </header>
+      <div class="cal-row">
+        <span class="cal-label">Slot</span>
+        <div id="cal-slots" class="cal-btns"></div>
+      </div>
+      <div class="cal-row">
+        <span class="cal-label">Outfit</span>
+        <span class="cal-optsel">
+          <button id="cal-prev" class="ghost" aria-label="Previous outfit">‹</button>
+          <b id="cal-option">—</b>
+          <button id="cal-next" class="ghost" aria-label="Next outfit">›</button>
+        </span>
+      </div>
+      <label class="cal-slider">X <input id="cal-x" type="range" min="-60" max="60" step="1" value="0" /><b id="cal-x-val">0</b></label>
+      <label class="cal-slider">Y <input id="cal-y" type="range" min="-60" max="60" step="1" value="0" /><b id="cal-y-val">0</b></label>
+      <label class="cal-slider">Scale <input id="cal-s" type="range" min="0.3" max="2.5" step="0.01" value="1" /><b id="cal-s-val">1.00</b></label>
+      <p class="cal-note">Adjust, then <b>Export JSON</b> and run <code>node scripts/apply-avatar-positions.js &lt;file&gt;</code>.</p>
+    </div>
+
     <!-- Slash (/) actions menu -->
     <div id="actions" class="actions" hidden>
       <div class="actions-input">

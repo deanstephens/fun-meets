@@ -11,7 +11,20 @@
 //
 // Clothing is supplied as transparent PNGs under assets/avatar/<slot>/.
 
+import { AVATAR_POSITIONS } from "./avatar-positions.js";
+
 const ASSET_BASE = "assets/avatar";
+
+// Apply a part's per-outfit calibration offset (if any) as CSS variables that
+// the part's transform composes in (see style.css). slot is the AVATAR_OPTIONS
+// slot, key is the chosen option.
+export function applyAdjust(el, slot, key) {
+  const a = AVATAR_POSITIONS[slot] && AVATAR_POSITIONS[slot][key];
+  if (!a) return;
+  if (a.x) el.style.setProperty("--ax", a.x + "px");
+  if (a.y) el.style.setProperty("--ay", a.y + "px");
+  if (a.scale != null && a.scale !== 1) el.style.setProperty("--as", String(a.scale));
+}
 
 export const AVATAR_OPTIONS = {
   hat: ["none", "pirate", "tophat", "crown", "beanie", "cowboy", "wizard"],
@@ -68,10 +81,14 @@ function legEl(side, cfg) {
   if (cfg.legs === "none") {
     leg.appendChild(div("stick"));
   } else {
-    leg.appendChild(asset("legs", `${cfg.legs}-${side}`, "cloth"));
+    const cloth = asset("legs", `${cfg.legs}-${side}`, "cloth");
+    applyAdjust(cloth, "legs", cfg.legs);
+    leg.appendChild(cloth);
   }
   if (cfg.feet !== "none") {
-    leg.appendChild(asset("feet", cfg.feet, "foot foot-" + side));
+    const foot = asset("feet", cfg.feet, "foot foot-" + side);
+    applyAdjust(foot, "feet", cfg.feet);
+    leg.appendChild(foot);
   }
   return leg;
 }
@@ -83,8 +100,13 @@ export function buildFigure(cfg) {
   fig.appendChild(legEl("r", cfg));
 
   const torso = div("torso");
-  if (cfg.body === "none") torso.appendChild(div("spine"));
-  else torso.appendChild(asset("body", cfg.body, "cloth"));
+  if (cfg.body === "none") {
+    torso.appendChild(div("spine"));
+  } else {
+    const cloth = asset("body", cfg.body, "cloth");
+    applyAdjust(cloth, "body", cfg.body);
+    torso.appendChild(cloth);
+  }
   fig.appendChild(torso);
 
   const armL = div("limb arm arm-l");
@@ -98,7 +120,9 @@ export function buildFigure(cfg) {
 
 export function buildHat(type) {
   if (!type || type === "none") return null;
-  return asset("hat", type, "hat-img");
+  const hat = asset("hat", type, "hat-img");
+  applyAdjust(hat, "hat", type);
+  return hat;
 }
 
 // Replace a tile's avatar parts (figure + hat) with ones built from cfg.

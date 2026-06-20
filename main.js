@@ -16,6 +16,7 @@ import {
   AVATAR_OPTIONS, SLOT_LABELS, OPTION_LABELS, DEFAULT_AVATAR,
   normalizeAvatar, applyAvatar,
 } from "./avatar.js";
+import { AVATAR_POSITIONS } from "./avatar-positions.js";
 import { EMOJIS, spawnShower, spawnThrow, spawnTrail } from "./emoji.js";
 import {
   COLOR_PRESETS, PATTERN_PRESETS, imageCss, sanitizeBg, downscaleImage,
@@ -347,6 +348,8 @@ async function start() {
       }
     },
   });
+
+  if (CALIBRATE) initCalibration();
 }
 
 // Prefer camera + mic; fall back to camera-only if no mic is available.
@@ -854,6 +857,139 @@ function selectAvatar(slot, val) {
     .querySelectorAll('.opt[data-slot="' + slot + '"]')
     .forEach((b) => b.classList.toggle("active", b.dataset.val === val));
   broadcastAvatar();
+}
+
+// ---- Avatar calibration mode (dev only; ?calibrate=1) ----
+
+const CALIBRATE = new URLSearchParams(window.location.search).has("calibrate");
+
+function initCalibration() {
+  const panel = document.getElementById("calibrate");
+  const slotsEl = document.getElementById("cal-slots");
+  const optionEl = document.getElementById("cal-option");
+  const xIn = document.getElementById("cal-x");
+  const yIn = document.getElementById("cal-y");
+  const sIn = document.getElementById("cal-s");
+  const xVal = document.getElementById("cal-x-val");
+  const yVal = document.getElementById("cal-y-val");
+  const sVal = document.getElementById("cal-s-val");
+
+  const SLOTS = Object.keys(AVATAR_OPTIONS);
+  // Working copy seeded from the committed adjustments.
+  const data = { hat: {}, body: {}, legs: {}, feet: {} };
+  for (const slot of SLOTS) {
+    const src = AVATAR_POSITIONS[slot] || {};
+    for (const opt of Object.keys(src)) data[slot][opt] = { x: 0, y: 0, scale: 1, ...src[opt] };
+  }
+  const opts = {};
+  for (const slot of SLOTS) opts[slot] = AVATAR_OPTIONS[slot].filter((o) => o !== "none");
+
+  let curSlot = "hat";
+  let curIdx = 0;
+  const curOption = () => opts[curSlot][curIdx];
+
+  function adj() {
+    const o = curOption();
+    if (!data[curSlot][o]) data[curSlot][o] = { x: 0, y: 0, scale: 1 };
+    return data[curSlot][o];
+  }
+
+  function partEls() {
+    if (curSlot === "hat") return selfTile.querySelectorAll(":scope > .hat-img");
+    if (curSlot === "body") return selfTile.querySelectorAll(".figure .torso .cloth");
+    if (curSlot === "legs") return selfTile.querySelectorAll(".figure .leg .cloth");
+    return selfTile.querySelectorAll(".figure .foot");
+  }
+
+  function applyVars() {
+    const a = adj();
+    partEls().forEach((el) => {
+      el.style.setProperty("--ax", a.x + "px");
+      el.style.setProperty("--ay", a.y + "px");
+      el.style.setProperty("--as", String(a.scale));
+    });
+  }
+
+  function syncLabels() {
+    xVal.textContent = xIn.value;
+    yVal.textContent = yIn.value;
+    sVal.textContent = Number(sIn.value).toFixed(2);
+  }
+
+  function showOutfit() {
+    const cfg = normalizeAvatar({});
+    cfg[curSlot] = curOption();
+    applyAvatar(selfTile, cfg); // preview just this part on a bare figure
+    optionEl.textContent = OPTION_LABELS[curOption()] || curOption();
+    const a = adj();
+    xIn.value = a.x;
+    yIn.value = a.y;
+    sIn.value = a.scale;
+    syncLabels();
+    applyVars();
+  }
+
+  function onSlide() {
+    const a = adj();
+    a.x = Number(xIn.value);
+    a.y = Number(yIn.value);
+    a.scale = Number(sIn.value);
+    syncLabels();
+    applyVars();
+  }
+
+  function selectSlot(slot) {
+    curSlot = slot;
+    curIdx = 0;
+    [...slotsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.slot === slot));
+    showOutfit();
+  }
+
+  function exportJson() {
+    const out = {};
+    for (const slot of SLOTS) {
+      for (const o of Object.keys(data[slot])) {
+        const a = data[slot][o];
+        const x = a.x || 0;
+        const y = a.y || 0;
+        const scale = a.scale == null ? 1 : a.scale;
+        if (x !== 0 || y !== 0 || scale !== 1) {
+          (out[slot] = out[slot] || {})[o] = { x, y, scale };
+        }
+      }
+    }
+    const json = JSON.stringify(out, null, 2);
+    try { navigator.clipboard.writeText(json).catch(() => {}); } catch (_) {}
+    const blob = new Blob([json], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "avatar-positions.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  SLOTS.forEach((slot) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "opt";
+    b.dataset.slot = slot;
+    b.textContent = SLOT_LABELS[slot];
+    b.addEventListener("click", () => selectSlot(slot));
+    slotsEl.appendChild(b);
+  });
+  document.getElementById("cal-prev").addEventListener("click", () => {
+    curIdx = (curIdx - 1 + opts[curSlot].length) % opts[curSlot].length;
+    showOutfit();
+  });
+  document.getElementById("cal-next").addEventListener("click", () => {
+    curIdx = (curIdx + 1) % opts[curSlot].length;
+    showOutfit();
+  });
+  [xIn, yIn, sIn].forEach((el) => el.addEventListener("input", onSlide));
+  document.getElementById("cal-export").addEventListener("click", exportJson);
+
+  panel.hidden = false;
+  selectSlot("hat");
 }
 
 // ---- Emojis ----
@@ -1462,7 +1598,7 @@ window.__stopScreen = () => stopSharing();
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running) return;
-  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, .card, button, input, textarea, a")) return;
+  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, #calibrate, .card, button, input, textarea, a")) return;
   const rect = stage.getBoundingClientRect();
   throwEmoji(e.clientX - rect.left, e.clientY - rect.top);
 }
