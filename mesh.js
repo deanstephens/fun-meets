@@ -67,6 +67,12 @@ const DIAL_TIMEOUT_MS = 12000;
 const HOST_BEAT_MS = 2500;
 const HOST_TIMEOUT_MS = 8000;
 
+// Reconnection: a media connection that drops out (ICE "disconnected"/"failed")
+// is given this long to recover — ICE often self-heals a brief blip, and we
+// also re-dial — before the peer is finally dropped.
+const RECONNECT_GRACE_MS = 8000;
+const RECONNECT_RETRY_MS = 3000;
+
 export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog, onScreenStream, onScreenStop }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
@@ -86,6 +92,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     calls: new Map(), // peerId -> MediaConnection (webcam)
     everConnected: new Set(), // peerIds whose media ICE reached connected
     dialTimers: new Map(), // peerId -> dial-timeout handle
+    reconnect: new Map(), // peerId -> { graceTimer, retryTimer, redial } while recovering
     screenStream: null, // our screen-share stream while sharing
     screenCalls: new Map(), // peerId -> outgoing screen MediaConnection
     closed: false,
@@ -214,12 +221,19 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
   }
 
   function wireCall(call) {
+    // Replacing an earlier (e.g. failed, mid-reconnect) call to this peer.
+    const prev = state.calls.get(call.peer);
+    if (prev && prev !== call) { try { prev.close(); } catch (_) {} }
     state.calls.set(call.peer, call);
     watchIce(call);
     call.on("stream", (remoteStream) => {
       if (onPeerStream) onPeerStream(call.peer, remoteStream);
     });
-    call.on("close", () => dropPeer(call.peer));
+    // Only the *current* call closing (and not while we're reconnecting) means
+    // the peer is gone; a superseded/old call closing is ignored.
+    call.on("close", () => {
+      if (state.calls.get(call.peer) === call && !state.reconnect.has(call.peer)) dropPeer(call.peer);
+    });
     call.on("error", (e) => log("call error", call.peer, e && e.type));
   }
 
@@ -237,13 +251,21 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
         if (s === "connected" || s === "completed") {
           state.everConnected.add(call.peer);
           clearDialTimeout(call.peer);
+          clearReconnect(call.peer); // recovered (self-heal or re-dial)
           reportStatus(call.peer, "connected");
-        } else if (s === "failed" || s === "closed" || s === "disconnected") {
-          log("ice", s, "->", call.peer);
-          if (state.everConnected.has(call.peer)) {
-            dropPeer(call.peer); // it was up and went away → peer left
-          } else {
-            reportStatus(call.peer, "failed"); // never came up → connection failed
+        } else if (s === "disconnected") {
+          // Often a transient blip: ICE keeps probing and may recover on its
+          // own. Don't drop — show "reconnecting" and start the grace window.
+          if (state.everConnected.has(call.peer)) startReconnect(call.peer, false);
+        } else if (s === "failed") {
+          // ICE gave up on this path — actively re-dial within the grace window.
+          if (state.everConnected.has(call.peer)) startReconnect(call.peer, true);
+          else reportStatus(call.peer, "failed"); // never came up → just failed
+        } else if (s === "closed") {
+          // Only the current call closing, and not mid-reconnect, is a departure.
+          if (state.calls.get(call.peer) === call &&
+              state.everConnected.has(call.peer) && !state.reconnect.has(call.peer)) {
+            dropPeer(call.peer);
           }
         }
       };
@@ -254,7 +276,54 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     call.on("stream", attach); // fallback in case peerConnection wasn't ready yet
   }
 
+  // Begin (or upgrade) a reconnection for a peer whose media dropped. We show
+  // "reconnecting", wait out a grace window for ICE to recover, and — when ICE
+  // has truly failed (redial) — periodically re-place the call. The lower id
+  // re-dials; the higher id waits for and answers it.
+  function startReconnect(id, redial) {
+    const existing = state.reconnect.get(id);
+    if (existing) {
+      if (redial && !existing.redial) {
+        existing.redial = true;
+        if (state.myId < id) scheduleRedial(id);
+      }
+      return;
+    }
+    log("reconnecting ->", id, redial ? "(re-dial)" : "");
+    reportStatus(id, "reconnecting");
+    const entry = {
+      redial,
+      retryTimer: null,
+      graceTimer: setTimeout(() => { log("reconnect timed out ->", id); dropPeer(id); }, RECONNECT_GRACE_MS),
+    };
+    state.reconnect.set(id, entry);
+    if (redial && state.myId < id) scheduleRedial(id);
+  }
+
+  function scheduleRedial(id) {
+    const e = state.reconnect.get(id);
+    if (!e || e.retryTimer) return;
+    e.retryTimer = setInterval(() => {
+      if (state.closed || !state.reconnect.has(id)) return;
+      log("re-dial ->", id);
+      if (state.calls.has(id)) {
+        try { state.calls.get(id).close(); } catch (_) {}
+        state.calls.delete(id);
+      }
+      placeCall(id);
+    }, RECONNECT_RETRY_MS);
+  }
+
+  function clearReconnect(id) {
+    const e = state.reconnect.get(id);
+    if (!e) return;
+    clearTimeout(e.graceTimer);
+    if (e.retryTimer) clearInterval(e.retryTimer);
+    state.reconnect.delete(id);
+  }
+
   function dropPeer(id) {
+    clearReconnect(id);
     let changed = false;
     if (state.calls.has(id)) {
       try { state.calls.get(id).close(); } catch (_) {}
@@ -505,6 +574,8 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       if (state.reelectTimer) { clearTimeout(state.reelectTimer); state.reelectTimer = null; }
       if (state.beatTimer) { clearInterval(state.beatTimer); state.beatTimer = null; }
       if (state.livenessTimer) { clearInterval(state.livenessTimer); state.livenessTimer = null; }
+      state.reconnect.forEach((e) => { clearTimeout(e.graceTimer); if (e.retryTimer) clearInterval(e.retryTimer); });
+      state.reconnect.clear();
       state.dialTimers.forEach((t) => clearTimeout(t));
       state.dialTimers.clear();
       state.screenCalls.forEach((c) => { try { c.close(); } catch (_) {} });

@@ -127,6 +127,17 @@ body {
   background: #46d27f;
 }
 
+.tile[data-status="reconnecting"] .status-dot {
+  background: #f1b24a;
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+/* Dim the webcam while a peer is reconnecting so the blip is visible. */
+.tile[data-status="reconnecting"] .head {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+
 .tile[data-status="failed"] .status-dot {
   background: #ff5a5a;
   animation: none;
@@ -893,6 +904,7 @@ body {
 }
 
 .dc-peer[data-status="connecting"] .pdot { background: #f1b24a; }
+.dc-peer[data-status="reconnecting"] .pdot { background: #f1b24a; }
 .dc-peer[data-status="connected"] .pdot { background: #46d27f; }
 .dc-peer[data-status="failed"] .pdot { background: #ff5a5a; }
 
