@@ -59,6 +59,7 @@ const pollEndBtn = document.getElementById("poll-end");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
+const toggleCollisionBtn = document.getElementById("toggle-collision");
 const toggleScreenBtn = document.getElementById("toggle-screen");
 const screenLayer = document.getElementById("screen-layer");
 const sidebar = document.getElementById("sidebar");
@@ -169,6 +170,17 @@ const ZONE_MUFFLED = 0.08;
 let currentBg = "";
 let amHost = false;
 let myMeshId = ""; // our mesh peer id (used to key our poll vote)
+
+// Avatar collision (room-wide, host-controlled). When on, your avatar can't
+// overlap others — you bounce off. Enforced locally against received positions;
+// the on/off state is broadcast by the host. See [[#61]].
+let collisionOn = false;
+let bounceVx = 0; // rebound velocity (px/s), decays each frame
+let bounceVy = 0;
+let wasColliding = false; // were we touching someone last frame (for impact bounce)
+const COLLISION_FACTOR = 0.9; // min centre distance = factor × tile size (heads ≈ tile)
+const BOUNCE_GAIN = 0.6; // how much incoming speed becomes rebound on impact
+const BOUNCE_DECAY = 7; // per-second exponential decay of the rebound
 
 // Serverless board persistence: the shared board (background + cards + zones) is
 // snapshotted to localStorage so a room survives everyone leaving. The host
@@ -306,8 +318,13 @@ async function start() {
       }
       if (s.myId) { dcMyId.textContent = s.myId; myMeshId = s.myId; }
       if (typeof s.isHost === "boolean") {
+        const becameHost = s.isHost && !amHost;
         amHost = s.isHost;
         dcRole.textContent = s.isHost ? "host" : "guest";
+        updateCollisionBtn(); // show/hide the host-only control
+        // A newly elected host re-asserts the room-wide collision state so it
+        // survives the host change.
+        if (becameHost && session) session.broadcast({ type: "collision", on: collisionOn });
         // Once the mesh says our role is *settled* (host elected, or guest
         // bootstrapped): the host restores the saved board (it starts alone); a
         // guest takes the live board from the host instead. Only now do we allow
@@ -356,6 +373,7 @@ async function start() {
         zones.forEach((z) => session.sendTo(id, zoneMessage(z)));
         const rem = timerRemaining();
         if (rem > 0) session.sendTo(id, { type: "timer", op: "start", remaining: rem });
+        session.sendTo(id, { type: "collision", on: collisionOn });
         if (poll) session.sendTo(id, {
           type: "poll", op: "sync",
           poll: { id: poll.id, question: poll.question, options: poll.options },
@@ -412,6 +430,8 @@ async function start() {
         else if (data.op === "clear") stopTimer(false);
       } else if (data.type === "poll") {
         handlePollMessage(data);
+      } else if (data.type === "collision") {
+        setCollision(data.on); // room-wide setting from the host
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -716,31 +736,107 @@ function applyPosition() {
   selfTile.style.translate = `${pos.x}px ${pos.y}px`;
 }
 
+// Push our avatar out of any overlap with other avatars (heads ≈ the tile
+// circle), and on first contact convert our incoming speed into a rebound so we
+// bounce off rather than stick. Run only when collision is enabled.
+function resolveCollisions(vx, vy) {
+  const ts = tileSize();
+  const minDist = ts * COLLISION_FACTOR;
+  let cx = pos.x + ts / 2;
+  let cy = pos.y + ts / 2;
+  let hit = false;
+  let bx = 0, by = 0; // rebound normal accumulated across contacts
+  remoteTiles.forEach((_, id) => {
+    const r = remoteCenter(id);
+    const ddx = cx - r.x;
+    const ddy = cy - r.y;
+    const d = Math.hypot(ddx, ddy);
+    if (d >= minDist) return;
+    hit = true;
+    const nx = d < 0.001 ? 1 : ddx / d;
+    const ny = d < 0.001 ? 0 : ddy / d;
+    cx += nx * (minDist - d); // resolve the overlap along the contact normal
+    cy += ny * (minDist - d);
+    const vIn = -(vx * nx + vy * ny); // our speed heading into them
+    if (vIn > 0) { bx += nx * vIn; by += ny * vIn; }
+  });
+  pos.x = cx - ts / 2;
+  pos.y = cy - ts / 2;
+  clampPosition();
+  // Kick only on the first frame of contact, so holding into someone is a solid
+  // wall (no per-frame jitter) but a fresh bump springs you back.
+  if (hit && !wasColliding) {
+    const cap = SPEED * 1.5;
+    bounceVx = Math.max(-cap, Math.min(cap, bounceVx + bx * BOUNCE_GAIN));
+    bounceVy = Math.max(-cap, Math.min(cap, bounceVy + by * BOUNCE_GAIN));
+  }
+  wasColliding = hit;
+}
+
+// ---- Collision toggle (room-wide, host-controlled) ----
+
+function updateCollisionBtn() {
+  toggleCollisionBtn.hidden = !amHost; // guests don't see the control
+  toggleCollisionBtn.textContent = "Collision: " + (collisionOn ? "On" : "Off");
+  toggleCollisionBtn.classList.toggle("active", collisionOn);
+}
+
+// Apply an incoming/known collision state (no broadcast).
+function setCollision(on) {
+  collisionOn = !!on;
+  if (!collisionOn) { bounceVx = bounceVy = 0; wasColliding = false; }
+  updateCollisionBtn();
+}
+
+// Host toggles it for the whole room.
+function toggleCollision() {
+  if (!amHost) return;
+  setCollision(!collisionOn);
+  if (session) session.broadcast({ type: "collision", on: collisionOn });
+}
+
 function loop(timestamp) {
   if (lastFrame === null) lastFrame = timestamp;
   const dt = Math.min((timestamp - lastFrame) / 1000, 0.05); // cap large gaps
   lastFrame = timestamp;
 
-  let dx = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-  let dy = (held.down ? 1 : 0) - (held.up ? 1 : 0);
-  const moving = dx !== 0 || dy !== 0;
+  const dx = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  const dy = (held.down ? 1 : 0) - (held.up ? 1 : 0);
+  const pressing = dx !== 0 || dy !== 0;
 
   // Animate our own stick-figure body while moving.
-  selfTile.classList.toggle("walking", moving);
+  selfTile.classList.toggle("walking", pressing);
 
   // Face the direction of horizontal movement (keep facing when moving purely
-  // vertically or standing still). dx is still the raw -1/0/1 here.
+  // vertically or standing still).
   if (dx > 0) selfTile.classList.remove("facing-left");
   else if (dx < 0) selfTile.classList.add("facing-left");
 
-  if (moving) {
-    // Normalize so diagonal movement isn't faster than axis-aligned.
+  // Input velocity (normalized so diagonals aren't faster).
+  let vx = 0, vy = 0;
+  if (pressing) {
     const len = Math.hypot(dx, dy);
-    dx /= len;
-    dy /= len;
-    pos.x += dx * SPEED * dt;
-    pos.y += dy * SPEED * dt;
-    clampPosition();
+    vx = (dx / len) * SPEED;
+    vy = (dy / len) * SPEED;
+  }
+
+  // Apply input + any rebound velocity, then resolve collisions. Position can
+  // change without a key held (rebound, or being shoved by someone), so we test
+  // actual movement rather than just key state.
+  const prevX = pos.x, prevY = pos.y;
+  pos.x += (vx + bounceVx) * dt;
+  pos.y += (vy + bounceVy) * dt;
+  clampPosition();
+  if (collisionOn) resolveCollisions(vx, vy);
+  const decay = Math.exp(-BOUNCE_DECAY * dt);
+  bounceVx *= decay;
+  bounceVy *= decay;
+  if (Math.abs(bounceVx) < 1) bounceVx = 0;
+  if (Math.abs(bounceVy) < 1) bounceVy = 0;
+
+  const movedNow = Math.abs(pos.x - prevX) > 0.01 || Math.abs(pos.y - prevY) > 0.01;
+
+  if (movedNow) {
     applyPosition();
     if (heldCardId) carryCardToMe(); // a held card travels with us
     // Throttle position updates to peers while moving.
@@ -749,11 +845,12 @@ function loop(timestamp) {
       if (heldCardId) broadcastCard(cards.get(heldCardId));
       lastPosSent = timestamp;
     }
-    // Drop an emoji trail behind us if it's enabled.
-    if (emojiState.trail && timestamp - lastTrail >= TRAIL_INTERVAL) {
+    // Drop an emoji trail behind us if it's enabled (follows the input dir).
+    if (pressing && emojiState.trail && timestamp - lastTrail >= TRAIL_INTERVAL) {
       lastTrail = timestamp;
       const c = localCenter();
-      spawnTrail(emojiLayer, emojiState.selected, c.x - dx * 26, c.y - dy * 26);
+      const len = Math.hypot(dx, dy) || 1;
+      spawnTrail(emojiLayer, emojiState.selected, c.x - (dx / len) * 26, c.y - (dy / len) * 26);
       if (session) session.broadcast({ type: "emoji", action: "trail", emoji: emojiState.selected });
     }
     wasMoving = true;
@@ -2389,6 +2486,7 @@ pollCreateEl.addEventListener("click", (e) => { if (e.target === pollCreateEl) c
 toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
+toggleCollisionBtn.addEventListener("click", toggleCollision);
 toggleScreenBtn.addEventListener("click", toggleScreen);
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.
