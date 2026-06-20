@@ -43,6 +43,9 @@ const copyLinkBtn = document.getElementById("copy-link");
 const toastEl = document.getElementById("toast");
 const toastEmoji = toastEl.querySelector(".toast-emoji");
 const toastText = toastEl.querySelector(".toast-text");
+const timerEl = document.getElementById("timer");
+const timerEmoji = timerEl.querySelector(".timer-emoji");
+const timerText = timerEl.querySelector(".timer-text");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
@@ -340,6 +343,8 @@ async function start() {
         session.sendTo(id, { type: "background", css: currentBg });
         cards.forEach((c) => session.sendTo(id, cardMessage(c)));
         zones.forEach((z) => session.sendTo(id, zoneMessage(z)));
+        const rem = timerRemaining();
+        if (rem > 0) session.sendTo(id, { type: "timer", op: "start", remaining: rem });
       }
     },
     // A peer told us where their tile is, or said something.
@@ -386,6 +391,9 @@ async function start() {
         }
       } else if (data.type === "roll") {
         showRoll(data); // shared dice roll / random pick
+      } else if (data.type === "timer") {
+        if (data.op === "start" && data.remaining > 0 && data.remaining <= 7200) setTimer(data.remaining, false);
+        else if (data.op === "clear") stopTimer(false);
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -1224,6 +1232,86 @@ function showRoll(data) {
   }
 }
 
+// ---- Shared countdown timer ----
+// We broadcast the *remaining seconds* (not an absolute time), so each client
+// counts down on its own clock — no cross-peer clock-sync needed.
+
+let timerEndsAt = 0; // local ms when the active timer ends (0 = none)
+let timerTick = null;
+let timerHide = null;
+
+function startTimer(seconds) {
+  setTimer(seconds, true);
+}
+
+function setTimer(seconds, broadcast) {
+  if (!(seconds > 0)) return;
+  clearTimeout(timerHide);
+  timerEndsAt = Date.now() + seconds * 1000;
+  timerEl.classList.remove("done");
+  timerEmoji.textContent = "⏱";
+  timerEl.hidden = false;
+  if (broadcast && session) session.broadcast({ type: "timer", op: "start", remaining: seconds });
+  tickTimer();
+}
+
+function stopTimer(broadcast) {
+  timerEndsAt = 0;
+  clearTimeout(timerTick);
+  clearTimeout(timerHide);
+  timerEl.hidden = true;
+  timerEl.classList.remove("done");
+  if (broadcast && session) session.broadcast({ type: "timer", op: "clear" });
+}
+
+function tickTimer() {
+  clearTimeout(timerTick);
+  if (!timerEndsAt) return;
+  const remMs = timerEndsAt - Date.now();
+  if (remMs <= 0) { timerEndsAt = 0; timerFinished(); return; }
+  const total = Math.ceil(remMs / 1000);
+  timerText.textContent = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  timerTick = setTimeout(tickTimer, Math.min(250, remMs));
+}
+
+function timerFinished() {
+  timerEmoji.textContent = "⏰";
+  timerText.textContent = "Time's up!";
+  timerEl.classList.add("done");
+  playBeep();
+  clearTimeout(timerHide);
+  timerHide = setTimeout(() => { timerEl.hidden = true; timerEl.classList.remove("done"); }, 5000);
+}
+
+// Seconds remaining on our active timer (for handing to late joiners), or 0.
+function timerRemaining() {
+  return timerEndsAt ? Math.ceil((timerEndsAt - Date.now()) / 1000) : 0;
+}
+
+// A short two-tone chime when the timer ends (best-effort; may be blocked).
+let beepCtx = null;
+function playBeep() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!beepCtx) beepCtx = new AC();
+    if (beepCtx.state === "suspended") beepCtx.resume();
+    const t0 = beepCtx.currentTime;
+    [[660, 0], [880, 0.2]].forEach(([freq, off]) => {
+      const o = beepCtx.createOscillator();
+      const g = beepCtx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      o.connect(g).connect(beepCtx.destination);
+      g.gain.setValueAtTime(0.0001, t0 + off);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + off + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + off + 0.18);
+      o.start(t0 + off);
+      o.stop(t0 + off + 0.2);
+    });
+  } catch (_) {}
+}
+
 // ---- Emotes (one-shot avatar animations) ----
 
 function playEmote(name) {
@@ -1392,6 +1480,30 @@ const ACTIONS = [
     label: "Pick someone",
     description: "Randomly pick a participant — who's next?",
     run: pickSomeone,
+  },
+  {
+    id: "timer-1",
+    label: "Timer: 1 min",
+    description: "Start a shared 1-minute countdown",
+    run: () => startTimer(60),
+  },
+  {
+    id: "timer-2",
+    label: "Timer: 2 min",
+    description: "Start a shared 2-minute countdown",
+    run: () => startTimer(120),
+  },
+  {
+    id: "timer-5",
+    label: "Timer: 5 min",
+    description: "Start a shared 5-minute countdown",
+    run: () => startTimer(300),
+  },
+  {
+    id: "stop-timer",
+    label: "Stop timer",
+    description: "Clear the shared countdown",
+    run: () => stopTimer(true),
   },
   {
     id: "create-card",
