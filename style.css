@@ -190,6 +190,34 @@ body {
   50% { transform: rotate(10deg); }
 }
 
+/* When a hand is raised, the avatar lifts its right arm up and holds it there
+   (the arm swing stops; a slow sway keeps it alive). The figure comes in front
+   of the head so the raised arm isn't hidden behind it. Shown when bodies on. */
+.tile.hand-up .figure {
+  z-index: 2; /* above the head (z-index: 1) so the raised arm shows */
+}
+
+.tile.hand-up .figure .arm-r {
+  animation: hand-raise-arm 2.2s ease-in-out infinite !important;
+  transform-origin: top center;
+}
+
+.tile.hand-up .figure .arm-r .forearm {
+  animation: hand-raise-fore 2.2s ease-in-out infinite !important;
+}
+
+@keyframes hand-raise-arm {
+  0% { transform: rotate(17deg); }       /* start from rest, animate the raise */
+  18%, 100% { transform: rotate(-128deg); } /* upper arm up-and-out, clear of the head */
+  55% { transform: rotate(-138deg); }    /* gentle sway while held up */
+}
+
+@keyframes hand-raise-fore {
+  0% { transform: rotate(0deg); }
+  18%, 100% { transform: rotate(-18deg); }  /* near-straight: hand reaches up-right */
+  55% { transform: rotate(-28deg); }
+}
+
 /* Ordered queue of raised hands. */
 .hands-panel {
   position: absolute;
