@@ -103,6 +103,32 @@ body {
   background: rgba(0, 0, 0, 0.55);
   z-index: 2;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+  max-width: 150px;
+}
+
+.tile-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tile-status {
+  font-size: 10px;
+  font-style: italic;
+  color: #c7c9e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tile-status.empty {
+  display: none;
 }
 
 /* Per-peer connection status indicator, placed on the circle's upper-right
@@ -859,6 +885,42 @@ body {
   width: 100%;
   margin: 0;
   text-align: left;
+}
+
+.status-set {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.status-set input {
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #eef0ff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.status-set input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.status-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.status-presets .ghost {
+  width: auto;
+  flex: 1;
+  text-align: center;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .settings-body .ghost.active {

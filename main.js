@@ -60,6 +60,8 @@ const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
 const toggleCollisionBtn = document.getElementById("toggle-collision");
+const statusInput = document.getElementById("status-input");
+const selfStatusEl = document.getElementById("self-status");
 const toggleScreenBtn = document.getElementById("toggle-screen");
 const screenLayer = document.getElementById("screen-layer");
 const sidebar = document.getElementById("sidebar");
@@ -130,6 +132,10 @@ const remoteAvatars = new Map();
 
 // id -> chosen display name for each remote participant.
 const remoteNames = new Map();
+
+// id -> presence status text for each remote participant.
+const remotePresence = new Map();
+let presence = ""; // our own status ("" = available); persisted across reloads
 
 // Our own display name (persisted across reloads). Initialised in the setup
 // section below, once the name word-lists are defined.
@@ -354,6 +360,7 @@ async function start() {
       removeRemoteTile(id);
       peerStatuses.delete(id);
       remoteNames.delete(id);
+      remotePresence.delete(id);
       renderConsolePeers();
     },
     // Per-peer connection status (connecting / connected / failed).
@@ -370,6 +377,7 @@ async function start() {
       session.sendTo(id, posMessage());
       session.sendTo(id, avatarMessage());
       session.sendTo(id, nameMessage());
+      session.sendTo(id, presenceMessage());
       // Only the host hands out shared board state (background + cards), so a
       // newcomer's empty state doesn't overwrite it.
       if (amHost) {
@@ -415,6 +423,9 @@ async function start() {
       } else if (data.type === "name") {
         remoteNames.set(id, sanitizeName(data.name) || shortId(id));
         applyRemoteName(id);
+      } else if (data.type === "status") {
+        remotePresence.set(id, sanitizeStatus(data.status));
+        applyRemotePresence(id);
       } else if (data.type === "avatar") {
         const cfg = normalizeAvatar(data.config);
         remoteAvatars.set(id, cfg);
@@ -553,8 +564,47 @@ function displayName(id) {
 // A peer's name arrived (or changed) — update everywhere it shows.
 function applyRemoteName(id) {
   const tile = remoteTiles.get(id);
-  if (tile && tile.label) tile.label.textContent = displayName(id);
+  if (tile && tile.nameEl) tile.nameEl.textContent = displayName(id);
   renderConsolePeers();
+}
+
+// ---- Presence status ----
+
+function sanitizeStatus(s) {
+  if (typeof s !== "string") return "";
+  return s.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 40);
+}
+
+function loadPresence() {
+  try { return sanitizeStatus(localStorage.getItem("funmeets-status")); } catch (_) { return ""; }
+}
+
+function savePresence() {
+  try { localStorage.setItem("funmeets-status", presence); } catch (_) {}
+}
+
+function presenceMessage() {
+  return { type: "status", status: presence };
+}
+
+// Show a status string in a tile's two-line label (hides the line when empty).
+function renderStatus(el, text) {
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("empty", !text);
+}
+
+function setPresence(text) {
+  presence = sanitizeStatus(text);
+  statusInput.value = presence;
+  renderStatus(selfStatusEl, presence);
+  savePresence();
+  if (session) session.broadcast(presenceMessage());
+}
+
+function applyRemotePresence(id) {
+  const tile = remoteTiles.get(id);
+  if (tile) renderStatus(tile.status, remotePresence.get(id) || "");
 }
 
 // ---- Remote tiles -------------------------------------------------------
@@ -630,7 +680,12 @@ function ensureRemoteTile(id) {
 
   const label = document.createElement("div");
   label.className = "tile-label";
-  label.textContent = displayName(id);
+  const nameEl = document.createElement("span");
+  nameEl.className = "tile-name";
+  nameEl.textContent = displayName(id);
+  const statusEl = document.createElement("span");
+  statusEl.className = "tile-status empty";
+  label.append(nameEl, statusEl);
 
   const dot = document.createElement("div");
   dot.className = "status-dot";
@@ -646,8 +701,9 @@ function ensureRemoteTile(id) {
   applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
-  tile = { el, head, video, veil, label };
+  tile = { el, head, video, veil, label, nameEl, status: statusEl };
   remoteTiles.set(id, tile);
+  renderStatus(statusEl, remotePresence.get(id) || "");
 
   // Use their reported position if we have one, otherwise the fallback grid.
   if (remotePositions.has(id)) applyRemotePosition(id);
@@ -2860,6 +2916,11 @@ stage.classList.add("bodies-on");
 username = loadUsername();
 usernameInput.value = username;
 
+// Restore the saved presence status and show it under our name.
+presence = loadPresence();
+statusInput.value = presence;
+renderStatus(selfStatusEl, presence);
+
 startBtn.addEventListener("click", start);
 usernameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); start(); }
@@ -2880,6 +2941,14 @@ toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
 toggleCollisionBtn.addEventListener("click", toggleCollision);
+// Presence status: set from the input (Enter/blur) or a preset button.
+statusInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); setPresence(statusInput.value); statusInput.blur(); }
+});
+statusInput.addEventListener("change", () => setPresence(statusInput.value));
+document.querySelectorAll(".status-presets button").forEach((btn) => {
+  btn.addEventListener("click", () => setPresence(btn.dataset.status));
+});
 // Whiteboard: drawing on the canvas + toolbar.
 drawCanvas.addEventListener("pointerdown", onDrawDown);
 drawCanvas.addEventListener("pointermove", onDrawMove);
