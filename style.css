@@ -1271,6 +1271,34 @@ body {
   display: none;
 }
 
+/* ---- Tag: the "it" player ---- */
+.tile.it .head {
+  animation: tag-pulse 0.85s ease-in-out infinite;
+}
+
+@keyframes tag-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px #ff5a5a, 0 0 16px 4px rgba(255, 80, 80, 0.5), 0 8px 30px rgba(0, 0, 0, 0.45); }
+  50% { box-shadow: 0 0 0 5px #ff8080, 0 0 28px 9px rgba(255, 90, 90, 0.72), 0 8px 30px rgba(0, 0, 0, 0.45); }
+}
+
+.tile.it::after {
+  content: "IT";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 9px;
+  background: #ff4d4d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+  pointer-events: none;
+}
+
 /* ---- Whiteboard ---- */
 /* Ink sits on the board behind avatars; in draw mode the canvas lifts to the
    front and captures the pointer so you can sketch anywhere. */
