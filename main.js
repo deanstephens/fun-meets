@@ -62,6 +62,8 @@ const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
 const toggleCollisionBtn = document.getElementById("toggle-collision");
+const toggleSfxBtn = document.getElementById("toggle-sfx");
+let sfxOn = true; // sound effects; loaded from localStorage at init
 const statusInput = document.getElementById("status-input");
 const selfStatusEl = document.getElementById("self-status");
 const toggleScreenBtn = document.getElementById("toggle-screen");
@@ -102,6 +104,7 @@ const actionList = document.getElementById("action-list");
 
 // Emoji elements
 const emojiLayer = document.getElementById("emoji-layer");
+const confettiLayer = document.getElementById("confetti-layer");
 const emojiSection = document.getElementById("emojipanel");
 const emojiToggleBtn = document.getElementById("emoji-toggle");
 const emojiPalette = document.getElementById("emoji-palette");
@@ -1645,6 +1648,7 @@ function showRoll(data) {
   const by = sanitizeName(data.by) || "Someone";
   if (data.kind === "dice" && data.value >= 1 && data.value <= 6) {
     showToast(DICE_FACES[data.value - 1], `${by} rolled a ${data.value}`);
+    sfx("dice");
   } else if (data.kind === "pick" && data.who) {
     showToast("🎯", `${by} picked ${sanitizeName(data.who) || "someone"}`);
   }
@@ -1706,28 +1710,89 @@ function timerRemaining() {
   return timerEndsAt ? Math.ceil((timerEndsAt - Date.now()) / 1000) : 0;
 }
 
-// A short two-tone chime when the timer ends (best-effort; may be blocked).
-let beepCtx = null;
-function playBeep() {
+// ---- Sound effects (WebAudio; gated by the Sound FX toggle, best-effort) ----
+
+let audioCtx = null;
+function audioContext() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!audioCtx) audioCtx = new AC();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+// Play a sequence of short tones. notes: [{ freq, at, dur, type, gain }].
+function playTones(notes) {
   try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    if (!beepCtx) beepCtx = new AC();
-    if (beepCtx.state === "suspended") beepCtx.resume();
-    const t0 = beepCtx.currentTime;
-    [[660, 0], [880, 0.2]].forEach(([freq, off]) => {
-      const o = beepCtx.createOscillator();
-      const g = beepCtx.createGain();
-      o.type = "sine";
-      o.frequency.value = freq;
-      o.connect(g).connect(beepCtx.destination);
-      g.gain.setValueAtTime(0.0001, t0 + off);
-      g.gain.exponentialRampToValueAtTime(0.18, t0 + off + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + off + 0.18);
-      o.start(t0 + off);
-      o.stop(t0 + off + 0.2);
+    const ctx = audioContext();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    notes.forEach((n) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = n.type || "sine";
+      o.frequency.value = n.freq;
+      o.connect(g).connect(ctx.destination);
+      const a = t0 + (n.at || 0);
+      const dur = n.dur || 0.18;
+      g.gain.setValueAtTime(0.0001, a);
+      g.gain.exponentialRampToValueAtTime(n.gain || 0.18, a + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, a + dur);
+      o.start(a);
+      o.stop(a + dur + 0.02);
     });
   } catch (_) {}
+}
+
+const SFX = {
+  win: [{ freq: 523, at: 0, dur: 0.12 }, { freq: 659, at: 0.12, dur: 0.12 }, { freq: 784, at: 0.24, dur: 0.12 }, { freq: 1047, at: 0.36, dur: 0.26, gain: 0.2 }],
+  dice: [{ freq: 300, at: 0, dur: 0.05, type: "square", gain: 0.1 }, { freq: 520, at: 0.06, dur: 0.05, type: "square", gain: 0.1 }, { freq: 770, at: 0.12, dur: 0.09, type: "triangle", gain: 0.12 }],
+};
+
+function sfx(name) {
+  if (sfxOn && SFX[name]) playTones(SFX[name]);
+}
+
+function playBeep() { // timer end
+  if (sfxOn) playTones([{ freq: 660, at: 0 }, { freq: 880, at: 0.2 }]);
+}
+
+function loadSfxPref() {
+  try { return localStorage.getItem("funmeets-sfx") !== "off"; } catch (_) { return true; }
+}
+
+function updateSfxBtn() {
+  toggleSfxBtn.textContent = "Sound FX: " + (sfxOn ? "On" : "Off");
+  toggleSfxBtn.classList.toggle("active", sfxOn);
+}
+
+function toggleSfx() {
+  sfxOn = !sfxOn;
+  try { localStorage.setItem("funmeets-sfx", sfxOn ? "on" : "off"); } catch (_) {}
+  updateSfxBtn();
+  if (sfxOn) sfx("dice"); // brief confirmation it's on
+}
+
+// ---- Confetti bursts (wins / poll close) ----
+
+const CONFETTI_COLORS = ["#ff5a5a", "#ffd23f", "#46d27f", "#5b8def", "#c3a1ff", "#ff9bd2", "#ff9b54"];
+
+function burstConfetti(nx, ny) {
+  const x = clamp01(nx) * stage.clientWidth;
+  const y = clamp01(ny) * stage.clientHeight;
+  for (let i = 0; i < 46; i++) {
+    const p = document.createElement("div");
+    p.className = "confetti";
+    p.style.left = x + "px";
+    p.style.top = y + "px";
+    p.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    p.style.setProperty("--dx", ((Math.random() * 2 - 1) * 180).toFixed(0) + "px");
+    p.style.setProperty("--dy", (90 + Math.random() * 240).toFixed(0) + "px");
+    p.style.setProperty("--rot", ((Math.random() * 2 - 1) * 720).toFixed(0) + "deg");
+    p.style.animationDelay = (Math.random() * 0.12).toFixed(2) + "s";
+    confettiLayer.appendChild(p);
+    setTimeout(() => p.remove(), 1900);
+  }
 }
 
 // ---- Polls (shared question + live tally) ----
@@ -1796,6 +1861,7 @@ function closePoll(broadcast) {
   const id = poll && poll.id;
   poll = null;
   pollEl.hidden = true;
+  if (id) burstConfetti(0.5, 0.5); // a little celebration as the results wrap up
   if (broadcast && id && session) session.broadcast({ type: "poll", op: "close", id });
 }
 
@@ -2937,6 +3003,7 @@ function upsertGame(data, mine) {
   const s = sanitizeGame(data);
   if (!s || !s.id) return;
   let g = games.get(s.id);
+  const hadWinner = g ? g.winner : null;
   if (!g) {
     g = s;
     games.set(g.id, g);
@@ -2947,6 +3014,8 @@ function upsertGame(data, mine) {
   }
   positionGame(g);
   renderGame(g);
+  // A winner just appeared (someone else's move ended it) — celebrate.
+  if (g.winner && g.winner !== "draw" && !hadWinner) { burstConfetti(g.nx, g.ny); sfx("win"); }
 }
 
 function buildGameEl(g) {
@@ -3021,6 +3090,7 @@ function playCell(g, target) {
   }
   g.winner = checkGameWin(g);
   if (!g.winner) g.turn = other;
+  else if (g.winner !== "draw") { burstConfetti(g.nx, g.ny); sfx("win"); } // we won/lost — celebrate
   renderGame(g);
   broadcastGame(g);
 }
@@ -3465,6 +3535,9 @@ toggleScreenBtn.addEventListener("click", toggleScreen);
 toggleMicBtn.addEventListener("click", toggleMute);
 toggleHandBtn.addEventListener("click", toggleHand);
 updateHandBtn();
+toggleSfxBtn.addEventListener("click", toggleSfx);
+sfxOn = loadSfxPref();
+updateSfxBtn();
 setInterval(pollQuality, 3000); // per-peer connection-quality pips (no-ops until connected)
 
 // ---- Sidebar: slide the whole panel off-screen and back ----
