@@ -159,6 +159,8 @@
     <!-- Right sidebar: dev console + chat, each independently collapsible
          (shown once joined) -->
     <aside id="sidebar" class="sidebar" hidden>
+      <!-- Edge tab to slide the whole sidebar off-screen and back -->
+      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle panel">›</button>
       <!-- Settings: room/AV toggles, moved off the top bar -->
       <section id="settingspanel" class="sidesection" aria-label="Settings">
         <header class="section-header">
@@ -273,6 +275,14 @@
     <!-- Controls hint, shown once joined -->
     <div id="controls" class="controls" hidden>
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp; <kbd>E</kbd> carry card &nbsp;·&nbsp; <kbd>Enter</kbd> chat</span>
+    </div>
+
+    <!-- Touch controls (shown only on touch / coarse-pointer devices) -->
+    <div id="joystick" class="joystick"><div id="joystick-thumb" class="joystick-thumb"></div></div>
+    <div id="touch-bar" class="touch-bar">
+      <button id="touch-actions" class="touch-btn" aria-label="Actions">≡</button>
+      <button id="touch-carry" class="touch-btn" aria-label="Pick up / drop card">✋</button>
+      <button id="touch-chat" class="touch-btn" aria-label="Chat">💬</button>
     </div>
   </div>
 

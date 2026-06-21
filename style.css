@@ -846,6 +846,34 @@ body {
   z-index: 7;
   /* transparent gaps let clicks fall through to the stage */
   pointer-events: none;
+  transition: transform 0.25s ease;
+}
+
+/* Collapsed: slide the whole sidebar off-screen (the edge tab stays visible). */
+body.sidebar-collapsed .sidebar {
+  transform: translateX(100%);
+}
+
+.sidebar-toggle {
+  position: absolute;
+  left: -34px;
+  top: 12px;
+  width: 32px;
+  height: 46px;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px 0 0 10px;
+  background: rgba(12, 14, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: none;
+  color: #eef0ff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar[hidden] {
@@ -1347,6 +1375,69 @@ body {
 .tile.holding.facing-left .figure .arm-r { transform: rotate(52deg) !important; }
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
+
+/* ---- Touch controls (joystick + buttons), only on touch devices ---- */
+.joystick,
+.touch-bar {
+  display: none;
+}
+
+body.touch .joystick {
+  display: block;
+  position: absolute;
+  left: 20px;
+  bottom: 26px;
+  width: 122px;
+  height: 122px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  z-index: 10;
+  touch-action: none;
+}
+
+.joystick-thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: rgba(108, 123, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  pointer-events: none;
+}
+
+body.touch .touch-bar {
+  display: flex;
+  position: absolute;
+  right: 16px;
+  bottom: 26px;
+  gap: 10px;
+  z-index: 10;
+}
+
+.touch-btn {
+  width: 54px;
+  height: 54px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 22px;
+  background: rgba(12, 14, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #eef0ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* On touch, the keyboard cheat-sheet isn't useful. */
+body.touch #controls {
+  display: none;
+}
 
 /* ---- Board games (tic-tac-toe / connect-four) ---- */
 .game-layer {
