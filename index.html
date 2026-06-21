@@ -126,6 +126,9 @@
     <!-- Emoji particles render here (pointer-events: none) -->
     <div id="emoji-layer" class="emoji-layer"></div>
 
+    <!-- Confetti bursts (wins / poll close) render here -->
+    <div id="confetti-layer" class="confetti-layer"></div>
+
     <!-- Whiteboard toolbar (shown only in draw mode) -->
     <div id="draw-tools" class="draw-tools" hidden>
       <div id="draw-colors" class="draw-colors"></div>
@@ -207,6 +210,7 @@
           <button id="toggle-spatial" class="ghost">Spatial audio: On</button>
           <!-- Host-only: room-wide collision toggle (hidden for guests) -->
           <button id="toggle-collision" class="ghost" hidden>Collision: Off</button>
+          <button id="toggle-sfx" class="ghost">Sound FX: On</button>
           <!-- Presence status, shown under your name -->
           <div class="status-set">
             <input id="status-input" type="text" maxlength="40" autocomplete="off" placeholder="Set a status…" />

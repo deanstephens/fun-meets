@@ -1500,6 +1500,30 @@ body.sidebar-collapsed .sidebar {
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
+/* ---- Confetti bursts ---- */
+.confetti-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  overflow: hidden;
+}
+
+.confetti {
+  position: absolute;
+  width: 8px;
+  height: 13px;
+  border-radius: 2px;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: confetti-fall 1.6s cubic-bezier(0.2, 0.6, 0.5, 1) forwards;
+}
+
+@keyframes confetti-fall {
+  0% { transform: translate(-50%, -50%) rotate(0deg); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)); opacity: 0; }
+}
+
 /* ---- Touch controls (joystick + buttons), only on touch devices ---- */
 .joystick,
 .touch-bar {
