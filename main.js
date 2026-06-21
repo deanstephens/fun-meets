@@ -2311,7 +2311,11 @@ function renderActions(raw) {
 function moveActionHighlight(delta) {
   if (!actionFiltered.length) return;
   actionHi = (actionHi + delta + actionFiltered.length) % actionFiltered.length;
-  [...actionList.children].forEach((li, i) => li.classList.toggle("active", i === actionHi));
+  [...actionList.children].forEach((li, i) => {
+    const active = i === actionHi;
+    li.classList.toggle("active", active);
+    if (active) li.scrollIntoView({ block: "nearest" }); // keep the selection visible
+  });
 }
 
 function runAction(a) {
