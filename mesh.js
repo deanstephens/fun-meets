@@ -126,11 +126,30 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     if (onPeerStatus) onPeerStatus(id, s);
   }
 
-  // Note we just heard from a peer. If we were mid-reconnect, hearing from them
-  // again means the blip is over — recover seamlessly.
+  // Note we just heard from a peer; if mid-reconnect, check if we've fully recovered.
   function seen(id) {
     state.lastSeen.set(id, Date.now());
-    if (state.reconnect.has(id)) {
+    if (state.reconnect.has(id)) maybeRecovered(id);
+  }
+
+  function mediaConnected(id) {
+    const call = state.calls.get(id);
+    const pc = call && call.peerConnection;
+    return !!(pc && (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed"));
+  }
+
+  function dataOpen(id) {
+    const c = state.connections.get(id);
+    return !!(c && c.open);
+  }
+
+  // Clear a reconnect only when BOTH the data channel and media are healthy
+  // again. Clearing on just one (e.g. media reconnecting while the data channel
+  // is still down) would stop the re-dial and leave the peer half-connected,
+  // which then re-trips the presence timeout — the flapping #52 first shipped.
+  function maybeRecovered(id) {
+    if (!state.reconnect.has(id)) return;
+    if (dataOpen(id) && mediaConnected(id)) {
       log("recovered ->", id);
       clearReconnect(id);
       reportStatus(id, "connected");
@@ -302,8 +321,11 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
         if (s === "connected" || s === "completed") {
           state.everConnected.add(call.peer);
           clearDialTimeout(call.peer);
-          clearReconnect(call.peer); // recovered (self-heal or re-dial)
-          reportStatus(call.peer, "connected");
+          if (state.reconnect.has(call.peer)) {
+            maybeRecovered(call.peer); // only clears once data is back too
+          } else {
+            reportStatus(call.peer, "connected");
+          }
         } else if (s === "disconnected" || s === "failed") {
           // A blip. Show "reconnecting" and recover: ICE may self-heal, and we
           // also re-dial (a quick self-heal cancels the re-dial before it
@@ -355,17 +377,21 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     if (!e || e.retryTimer) return;
     const redial = () => {
       if (state.closed || !state.reconnect.has(id)) return;
-      log("re-dial ->", id);
-      // Re-dial media.
-      if (state.calls.has(id)) {
-        try { state.calls.get(id).close(); } catch (_) {}
-        state.calls.delete(id);
+      // Only re-dial what's actually down, so a data-only blip doesn't tear
+      // down (and flap) a healthy media call, and vice-versa.
+      const needMedia = !mediaConnected(id);
+      const needData = !dataOpen(id) && !state.connecting.has(id);
+      if (!needMedia && !needData) { maybeRecovered(id); return; }
+      log("re-dial ->", id, needMedia ? "media" : "", needData ? "data" : "");
+      if (needMedia) {
+        if (state.calls.has(id)) {
+          try { state.calls.get(id).close(); } catch (_) {}
+          state.calls.delete(id);
+        }
+        placeCall(id);
       }
-      placeCall(id);
-      // Re-dial the data channel too if it dropped (a blip closes it; presence
-      // and app messages only resume once it's re-established).
-      const c = state.connections.get(id);
-      if (!c || !c.open) {
+      if (needData) {
+        const c = state.connections.get(id);
         if (c) { try { c.close(); } catch (_) {} }
         state.connections.delete(id);
         tryConnect(id);
