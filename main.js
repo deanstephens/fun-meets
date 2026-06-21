@@ -56,6 +56,8 @@ const pollQEl = document.getElementById("poll-q");
 const pollOptionsEl = document.getElementById("poll-options");
 const pollTotalEl = document.getElementById("poll-total");
 const pollEndBtn = document.getElementById("poll-end");
+const helpEl = document.getElementById("help");
+const helpActionsEl = document.getElementById("help-actions");
 const toggleBodyBtn = document.getElementById("toggle-body");
 const toggleFrameBtn = document.getElementById("toggle-frame");
 const toggleSpatialBtn = document.getElementById("toggle-spatial");
@@ -1041,6 +1043,18 @@ function onKeyDown(e) {
     if (e.key === "Escape" && document.activeElement) document.activeElement.blur();
     return; // let the input field handle the keystroke
   }
+  // Escape closes the help overlay (before other Escape handlers).
+  if (e.key === "Escape" && !helpEl.hidden) {
+    closeHelp();
+    e.preventDefault();
+    return;
+  }
+  // "?" toggles the help / cheat-sheet overlay.
+  if (e.key === "?" && running) {
+    toggleHelp();
+    e.preventDefault();
+    return;
+  }
   // Escape leaves whiteboard draw mode.
   if (e.key === "Escape" && drawMode) {
     exitDraw();
@@ -1613,6 +1627,32 @@ function openPollCreate() {
 
 function closePollCreate() {
   pollCreateEl.hidden = true;
+}
+
+// ---- Help / cheat-sheet overlay ----
+
+function buildHelpActions() {
+  helpActionsEl.innerHTML = "";
+  ACTIONS.forEach((a) => {
+    const li = document.createElement("li");
+    const b = document.createElement("b");
+    b.textContent = a.label;
+    li.append(b, document.createTextNode(" — " + a.description));
+    helpActionsEl.appendChild(li);
+  });
+}
+
+function openHelp() {
+  buildHelpActions(); // list the live action registry
+  helpEl.hidden = false;
+}
+
+function closeHelp() {
+  helpEl.hidden = true;
+}
+
+function toggleHelp() {
+  if (helpEl.hidden) openHelp(); else closeHelp();
 }
 
 function submitPoll() {
@@ -3274,6 +3314,9 @@ pollEndBtn.addEventListener("click", () => closePoll(true));
   });
 });
 pollCreateEl.addEventListener("click", (e) => { if (e.target === pollCreateEl) closePollCreate(); });
+// Help overlay: close button + tap-outside.
+document.getElementById("help-close").addEventListener("click", closeHelp);
+helpEl.addEventListener("click", (e) => { if (e.target === helpEl) closeHelp(); });
 toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
@@ -3378,6 +3421,7 @@ syncViewport();
     expandChat();
     chatInput.focus();
   });
+  document.getElementById("touch-help").addEventListener("click", toggleHelp);
 })();
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.

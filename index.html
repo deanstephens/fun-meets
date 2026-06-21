@@ -45,6 +45,32 @@
       </div>
     </div>
 
+    <!-- Help / cheat-sheet overlay (press ?) -->
+    <div id="help" class="help-modal" hidden>
+      <div class="help-card">
+        <header class="help-head">
+          <h2>Controls &amp; actions</h2>
+          <button id="help-close" class="ghost" aria-label="Close help">×</button>
+        </header>
+        <div class="help-body">
+          <section class="help-section">
+            <h3>Controls</h3>
+            <ul class="help-list">
+              <li><b>W A S D</b> — move (or the on-screen joystick on touch)</li>
+              <li><b>E</b> — pick up / drop a card you're next to</li>
+              <li><b>Enter</b> — chat &nbsp;·&nbsp; <b>/w name …</b> — whisper one person</li>
+              <li><b>1–9</b> — burst an emoji &nbsp;·&nbsp; <b>click</b> — throw it at the cursor</li>
+              <li><b>Mute</b> (top bar) — mute your mic &nbsp;·&nbsp; <b>?</b> — this help</li>
+            </ul>
+          </section>
+          <section class="help-section">
+            <h3>Actions <span class="help-dim">(press <b>/</b>)</span></h3>
+            <ul id="help-actions" class="help-list"></ul>
+          </section>
+        </div>
+      </div>
+    </div>
+
     <!-- Live poll results -->
     <div id="poll" class="poll" hidden>
       <header class="poll-head">
@@ -274,7 +300,7 @@
 
     <!-- Controls hint, shown once joined -->
     <div id="controls" class="controls" hidden>
-      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp; <kbd>E</kbd> carry card &nbsp;·&nbsp; <kbd>Enter</kbd> chat</span>
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp; <kbd>E</kbd> carry card &nbsp;·&nbsp; <kbd>Enter</kbd> chat &nbsp;·&nbsp; <kbd>?</kbd> help</span>
     </div>
 
     <!-- Touch controls (shown only on touch / coarse-pointer devices) -->
@@ -283,6 +309,7 @@
       <button id="touch-actions" class="touch-btn" aria-label="Actions">≡</button>
       <button id="touch-carry" class="touch-btn" aria-label="Pick up / drop card">✋</button>
       <button id="touch-chat" class="touch-btn" aria-label="Chat">💬</button>
+      <button id="touch-help" class="touch-btn" aria-label="Help">?</button>
     </div>
   </div>
 
