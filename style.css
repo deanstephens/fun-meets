@@ -161,6 +161,102 @@ body {
   display: flex;
 }
 
+/* Raised-hand badge (top-right of a tile). */
+.tile-hand {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: rgba(20, 18, 8, 0.82);
+  border: 1px solid rgba(255, 210, 90, 0.6);
+  border-radius: 50%;
+  z-index: 3;
+  pointer-events: none;
+  animation: hand-wave 1.4s ease-in-out infinite;
+  transform-origin: 70% 90%;
+}
+
+.tile.hand-up .tile-hand {
+  display: flex;
+}
+
+@keyframes hand-wave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(10deg); }
+}
+
+/* When a hand is raised, the avatar lifts its right arm up and holds it there
+   (the arm swing stops; a slow sway keeps it alive). The figure comes in front
+   of the head so the raised arm isn't hidden behind it. Shown when bodies on. */
+.tile.hand-up .figure {
+  z-index: 2; /* above the head (z-index: 1) so the raised arm shows */
+}
+
+.tile.hand-up .figure .arm-r {
+  animation: hand-raise-arm 2.2s ease-in-out infinite !important;
+  transform-origin: top center;
+}
+
+.tile.hand-up .figure .arm-r .forearm {
+  animation: hand-raise-fore 2.2s ease-in-out infinite !important;
+}
+
+@keyframes hand-raise-arm {
+  0% { transform: rotate(17deg); }       /* start from rest, animate the raise */
+  18%, 100% { transform: rotate(-128deg); } /* upper arm up-and-out, clear of the head */
+  55% { transform: rotate(-138deg); }    /* gentle sway while held up */
+}
+
+@keyframes hand-raise-fore {
+  0% { transform: rotate(0deg); }
+  18%, 100% { transform: rotate(-18deg); }  /* near-straight: hand reaches up-right */
+  55% { transform: rotate(-28deg); }
+}
+
+/* Ordered queue of raised hands. */
+.hands-panel {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  min-width: 120px;
+  max-width: 40vw;
+  padding: 8px 12px;
+  background: rgba(12, 14, 32, 0.92);
+  border: 1px solid rgba(255, 210, 90, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 8;
+}
+
+.hands-panel[hidden] {
+  display: none;
+}
+
+.hands-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd25a;
+  margin-bottom: 4px;
+}
+
+.hands-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hands-list li {
+  font-size: 13px;
+  color: #eef0ff;
+}
+
 /* Per-peer connection status indicator, placed on the circle's upper-right
    edge (also on the unclipped wrapper). */
 .status-dot {

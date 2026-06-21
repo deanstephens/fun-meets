@@ -66,6 +66,9 @@ const statusInput = document.getElementById("status-input");
 const selfStatusEl = document.getElementById("self-status");
 const toggleScreenBtn = document.getElementById("toggle-screen");
 const toggleMicBtn = document.getElementById("toggle-mic");
+const toggleHandBtn = document.getElementById("toggle-hand");
+const handsPanel = document.getElementById("hands-panel");
+const handsListEl = document.getElementById("hands-list");
 const screenLayer = document.getElementById("screen-layer");
 const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
@@ -144,6 +147,12 @@ let presence = ""; // our own status ("" = available); persisted across reloads
 // id -> whether each remote participant has muted their mic.
 const remoteMuted = new Map();
 let micMuted = false; // is our mic muted?
+
+// Raised hands: id -> timestamp the hand went up. Ordering uses the raiser's
+// own clock (sent with the message) so everyone sorts the queue identically.
+const remoteHands = new Map();
+let handRaised = false;
+let myHandAt = 0;
 
 // Our own display name (persisted across reloads). Initialised in the setup
 // section below, once the name word-lists are defined.
@@ -372,6 +381,8 @@ async function start() {
       remoteNames.delete(id);
       remotePresence.delete(id);
       remoteMuted.delete(id);
+      remoteHands.delete(id);
+      updateHandsUI();
       // The host frees a departed player's game seats so the game stays playable.
       if (amHost) games.forEach((g) => {
         let changed = false;
@@ -397,6 +408,7 @@ async function start() {
       session.sendTo(id, nameMessage());
       session.sendTo(id, presenceMessage());
       session.sendTo(id, muteMessage());
+      session.sendTo(id, handMessage());
       // Only the host hands out shared board state (background + cards), so a
       // newcomer's empty state doesn't overwrite it.
       if (amHost) {
@@ -452,6 +464,11 @@ async function start() {
       } else if (data.type === "mute") {
         remoteMuted.set(id, !!data.muted);
         applyRemoteMute(id);
+      } else if (data.type === "hand") {
+        if (data.raised) remoteHands.set(id, Number(data.at) || Date.now());
+        else remoteHands.delete(id);
+        applyRemoteHand(id);
+        updateHandsUI();
       } else if (data.type === "avatar") {
         const cfg = normalizeAvatar(data.config);
         remoteAvatars.set(id, cfg);
@@ -672,6 +689,47 @@ function applyRemoteMute(id) {
   if (tile) tile.el.classList.toggle("mic-off", !!remoteMuted.get(id));
 }
 
+// ---- Raise hand + speaker queue ----
+
+function handMessage() {
+  return { type: "hand", raised: handRaised, at: myHandAt };
+}
+
+function updateHandBtn() {
+  toggleHandBtn.textContent = handRaised ? "Lower hand" : "Raise hand";
+  toggleHandBtn.classList.toggle("active", handRaised);
+}
+
+function toggleHand() {
+  handRaised = !handRaised;
+  myHandAt = handRaised ? Date.now() : 0;
+  updateHandBtn();
+  updateHandsUI();
+  if (session) session.broadcast(handMessage());
+}
+
+function applyRemoteHand(id) {
+  const tile = remoteTiles.get(id);
+  if (tile) tile.el.classList.toggle("hand-up", remoteHands.has(id));
+}
+
+// Refresh the tile badges and the ordered queue panel.
+function updateHandsUI() {
+  selfTile.classList.toggle("hand-up", handRaised);
+  remoteTiles.forEach((tile, id) => tile.el.classList.toggle("hand-up", remoteHands.has(id)));
+  const q = [];
+  if (handRaised) q.push({ name: "You", at: myHandAt });
+  remoteHands.forEach((at, id) => q.push({ name: displayName(id), at }));
+  q.sort((a, b) => a.at - b.at);
+  handsListEl.innerHTML = "";
+  q.forEach((e) => {
+    const li = document.createElement("li");
+    li.textContent = e.name;
+    handsListEl.appendChild(li);
+  });
+  handsPanel.hidden = q.length === 0;
+}
+
 // ---- Remote tiles -------------------------------------------------------
 
 function shortId(id) {
@@ -759,6 +817,10 @@ function ensureRemoteTile(id) {
   mute.className = "tile-mute";
   mute.textContent = "🔇";
 
+  const hand = document.createElement("div");
+  hand.className = "tile-hand";
+  hand.textContent = "✋";
+
   const veil = document.createElement("div");
   veil.className = "veil";
   veil.textContent = STATUS_TEXT.connecting;
@@ -766,7 +828,7 @@ function ensureRemoteTile(id) {
   // Video + veil are clipped inside the circular head; label + status dot live
   // on the unclipped wrapper so they aren't cut off by the circle.
   head.append(video, veil);
-  el.append(head, label, dot, mute);
+  el.append(head, label, dot, mute, hand);
   applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
@@ -774,6 +836,7 @@ function ensureRemoteTile(id) {
   remoteTiles.set(id, tile);
   renderStatus(statusEl, remotePresence.get(id) || "");
   applyRemoteMute(id);
+  applyRemoteHand(id);
 
   // Use their reported position if we have one, otherwise the fallback grid.
   if (remotePositions.has(id)) applyRemotePosition(id);
@@ -2294,6 +2357,12 @@ const ACTIONS = [
     run: () => removeBall(true),
   },
   {
+    id: "raise-hand",
+    label: "Raise / lower hand",
+    description: "Toggle your 🖐 hand and join the speaker queue",
+    run: toggleHand,
+  },
+  {
     id: "start-tag",
     label: "Tag: start (you're it)",
     description: "Start a game of tag — touch someone to pass it on",
@@ -3339,6 +3408,8 @@ document.getElementById("draw-clear").addEventListener("click", () => clearDraw(
 document.getElementById("draw-done").addEventListener("click", exitDraw);
 toggleScreenBtn.addEventListener("click", toggleScreen);
 toggleMicBtn.addEventListener("click", toggleMute);
+toggleHandBtn.addEventListener("click", toggleHand);
+updateHandBtn();
 
 // ---- Sidebar: slide the whole panel off-screen and back ----
 const sidebarToggleBtn = document.getElementById("sidebar-toggle");
