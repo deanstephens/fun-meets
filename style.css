@@ -1311,6 +1311,114 @@ body {
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
+/* ---- Board games (tic-tac-toe / connect-four) ---- */
+.game-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.game {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  background: rgba(14, 16, 36, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  user-select: none;
+}
+
+.game.dragging {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.game-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  cursor: grab;
+}
+
+.game-status {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #eef0ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-btn {
+  margin: 0;
+  padding: 1px 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  color: #eef0ff;
+  cursor: pointer;
+}
+
+.game-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.game-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.game-cell {
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-cell:disabled {
+  cursor: default;
+}
+
+/* Tic-tac-toe: square X/O cells. */
+.game[data-type="ttt"] .game-cell {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  font-size: 26px;
+}
+
+.game[data-type="ttt"] .game-cell.x { color: #ff7a7a; }
+.game[data-type="ttt"] .game-cell.o { color: #6fc4ff; }
+.game[data-type="ttt"] .game-cell:not(.x):not(.o):not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Connect-four: round discs in a blue board. */
+.game[data-type="c4"] {
+  background: #2747b8;
+}
+.game[data-type="c4"] .game-cell {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(8, 12, 36, 0.82);
+}
+.game[data-type="c4"] .game-cell.x { background: #ff5a5a; }
+.game[data-type="c4"] .game-cell.o { background: #ffd23f; }
+
 /* ---- Kickable ball ---- */
 .ball {
   position: absolute;

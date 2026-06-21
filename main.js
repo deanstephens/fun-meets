@@ -85,6 +85,7 @@ const avatarList = document.getElementById("avatar-list");
 const zoneLayer = document.getElementById("zone-layer");
 const cardLayer = document.getElementById("card-layer");
 const ballEl = document.getElementById("ball");
+const gameLayer = document.getElementById("game-layer");
 const drawCanvas = document.getElementById("draw-layer");
 const drawCtx = drawCanvas.getContext("2d");
 const drawTools = document.getElementById("draw-tools");
@@ -361,6 +362,13 @@ async function start() {
       peerStatuses.delete(id);
       remoteNames.delete(id);
       remotePresence.delete(id);
+      // The host frees a departed player's game seats so the game stays playable.
+      if (amHost) games.forEach((g) => {
+        let changed = false;
+        if (g.seats.X === id) { g.seats.X = null; changed = true; }
+        if (g.seats.O === id) { g.seats.O = null; changed = true; }
+        if (changed) { renderGame(g); broadcastGame(g); }
+      });
       renderConsolePeers();
     },
     // Per-peer connection status (connecting / connected / failed).
@@ -390,6 +398,7 @@ async function start() {
         if (strokes.size) session.sendTo(id, { type: "draw", op: "sync", strokes: [...strokes.values()] });
         if (ball) session.sendTo(id, { type: "ball", op: "state", nx: ball.nx, ny: ball.ny, vx: ball.vx, vy: ball.vy });
         if (tagIt) session.sendTo(id, { type: "tag", op: "set", it: tagIt });
+        games.forEach((g) => session.sendTo(id, gameMessage(g)));
         if (poll) session.sendTo(id, {
           type: "poll", op: "sync",
           poll: { id: poll.id, question: poll.question, options: poll.options },
@@ -457,6 +466,8 @@ async function start() {
         handleBallMessage(data); // kickable shared ball
       } else if (data.type === "tag") {
         handleTagMessage(data); // tag minigame state
+      } else if (data.type === "game") {
+        handleGameMessage(data); // board games (tic-tac-toe / connect-four)
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -2181,6 +2192,18 @@ const ACTIONS = [
     run: createCardAtMe,
   },
   {
+    id: "tic-tac-toe",
+    label: "Tic-tac-toe",
+    description: "Drop a tic-tac-toe board to play together",
+    run: () => createGameAtMe("ttt"),
+  },
+  {
+    id: "connect-four",
+    label: "Connect four",
+    description: "Drop a connect-four board to play together",
+    run: () => createGameAtMe("c4"),
+  },
+  {
     id: "create-zone",
     label: "Create huddle zone",
     description: "Make a zone — people inside hear each other, muffled to outside",
@@ -2616,6 +2639,230 @@ function positionCard(card) {
   card.el.style.top = card.ny * stage.clientHeight + "px";
 }
 
+// ---- Board games (tic-tac-toe / connect-four) ----
+// A placeable board two people play together. Each move broadcasts the full,
+// turn-gated state (turn-based, so there's no concurrent-move conflict); the
+// host re-sends every board to late joiners (like cards). Seats are claimed by
+// the first two distinct people to play (X first, then O).
+
+const games = new Map(); // id -> { id, type, cells, turn, seats:{X,O}, winner, nx, ny, el, statusEl, gridEl }
+const TTT_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+let gameDrag = null;
+
+const gameCellCount = (type) => (type === "c4" ? 42 : 9);
+const gameCols = (type) => (type === "c4" ? 7 : 3);
+
+function createGameAtMe(type) {
+  const c = localCenter();
+  const g = {
+    id: "g" + Math.random().toString(36).slice(2, 9),
+    type,
+    cells: Array(gameCellCount(type)).fill(""),
+    turn: "X",
+    seats: { X: null, O: null },
+    winner: null,
+    nx: clamp01(c.x / stage.clientWidth),
+    ny: clamp01(c.y / stage.clientHeight),
+  };
+  upsertGame(g, true);
+  broadcastGame(games.get(g.id));
+}
+
+function sanitizeGame(d) {
+  if (!d || (d.type !== "ttt" && d.type !== "c4")) return null;
+  const n = gameCellCount(d.type);
+  const cells = (Array.isArray(d.cells) ? d.cells.slice(0, n) : []).map((v) => (v === "X" || v === "O" ? v : ""));
+  while (cells.length < n) cells.push("");
+  const seatOf = (v) => (typeof v === "string" && v ? v : null);
+  const s = d.seats || {};
+  return {
+    id: String(d.id || ""),
+    type: d.type,
+    cells,
+    turn: d.turn === "O" ? "O" : "X",
+    seats: { X: seatOf(s.X), O: seatOf(s.O) },
+    winner: (d.winner === "X" || d.winner === "O" || d.winner === "draw") ? d.winner : null,
+    nx: clamp01(Number(d.nx) || 0),
+    ny: clamp01(Number(d.ny) || 0),
+  };
+}
+
+function upsertGame(data, mine) {
+  const s = sanitizeGame(data);
+  if (!s || !s.id) return;
+  let g = games.get(s.id);
+  if (!g) {
+    g = s;
+    games.set(g.id, g);
+    buildGameEl(g);
+  } else {
+    g.cells = s.cells; g.turn = s.turn; g.seats = s.seats; g.winner = s.winner;
+    if (!(gameDrag && gameDrag.id === g.id)) { g.nx = s.nx; g.ny = s.ny; }
+  }
+  positionGame(g);
+  renderGame(g);
+}
+
+function buildGameEl(g) {
+  const el = document.createElement("div");
+  el.className = "game";
+  el.dataset.type = g.type;
+  const head = document.createElement("div");
+  head.className = "game-head";
+  const status = document.createElement("span");
+  status.className = "game-status";
+  const reset = document.createElement("button");
+  reset.className = "game-btn"; reset.title = "New game"; reset.textContent = "↻";
+  reset.addEventListener("click", (e) => { e.stopPropagation(); resetGame(g); });
+  const close = document.createElement("button");
+  close.className = "game-btn"; close.title = "Remove"; close.textContent = "×";
+  close.addEventListener("click", (e) => { e.stopPropagation(); closeGame(g); });
+  head.append(status, reset, close);
+  head.addEventListener("pointerdown", (e) => startGameDrag(e, g.id));
+  const grid = document.createElement("div");
+  grid.className = "game-grid";
+  el.append(head, grid);
+  gameLayer.appendChild(el);
+  g.el = el; g.statusEl = status; g.gridEl = grid;
+}
+
+// Label for a seat: the player's name if claimed, else the piece (X/O or colour).
+function seatLabel(g, seat) {
+  const id = g.seats[seat];
+  if (id) return id === myMeshId ? "You" : displayName(id);
+  return g.type === "c4" ? (seat === "X" ? "Red" : "Yellow") : seat;
+}
+
+function renderGame(g) {
+  let txt;
+  if (g.winner === "draw") txt = "Draw";
+  else if (g.winner) txt = g.seats[g.winner] === myMeshId ? "You win! 🎉" : seatLabel(g, g.winner) + " wins";
+  else if (g.seats[g.turn] === myMeshId) txt = "Your turn";
+  else if (g.seats[g.turn]) txt = seatLabel(g, g.turn) + "’s turn";
+  else txt = seatLabel(g, g.turn) + " — tap to play";
+  g.statusEl.textContent = (g.type === "c4" ? "Connect Four · " : "Tic-Tac-Toe · ") + txt;
+
+  g.gridEl.style.gridTemplateColumns = `repeat(${gameCols(g.type)}, 1fr)`;
+  g.gridEl.innerHTML = "";
+  g.cells.forEach((v, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "game-cell" + (v ? " " + (v === "X" ? "x" : "o") : "");
+    if (g.type === "ttt" && v) cell.textContent = v;
+    cell.disabled = !!g.winner;
+    const target = g.type === "c4" ? i % 7 : i;
+    cell.addEventListener("click", (e) => { e.stopPropagation(); playCell(g, target); });
+    g.gridEl.appendChild(cell);
+  });
+}
+
+function playCell(g, target) {
+  if (g.winner) return;
+  const seat = g.turn;
+  const other = seat === "X" ? "O" : "X";
+  if (g.seats[seat] !== myMeshId) {
+    // Claim the open seat on your first move; you can't also be the other seat.
+    if (g.seats[seat] === null && g.seats[other] !== myMeshId) g.seats[seat] = myMeshId;
+    else return;
+  }
+  if (g.type === "ttt") {
+    if (g.cells[target] !== "") return;
+    g.cells[target] = seat;
+  } else {
+    let placed = -1;
+    for (let r = 5; r >= 0; r--) { const i = r * 7 + target; if (g.cells[i] === "") { g.cells[i] = seat; placed = i; break; } }
+    if (placed === -1) return; // column full
+  }
+  g.winner = checkGameWin(g);
+  if (!g.winner) g.turn = other;
+  renderGame(g);
+  broadcastGame(g);
+}
+
+function checkGameWin(g) {
+  const c = g.cells;
+  if (g.type === "ttt") {
+    for (const [a, b, d] of TTT_LINES) if (c[a] && c[a] === c[b] && c[b] === c[d]) return c[a];
+  } else {
+    const at = (r, col) => (r >= 0 && r < 6 && col >= 0 && col < 7 ? c[r * 7 + col] : "");
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (let r = 0; r < 6; r++) for (let col = 0; col < 7; col++) {
+      const v = at(r, col);
+      if (!v) continue;
+      for (const [dr, dc] of dirs) { let k = 1; while (k < 4 && at(r + dr * k, col + dc * k) === v) k++; if (k === 4) return v; }
+    }
+  }
+  return c.every((x) => x) ? "draw" : null;
+}
+
+function resetGame(g) {
+  g.cells = Array(gameCellCount(g.type)).fill("");
+  g.turn = "X";
+  g.winner = null;
+  renderGame(g);
+  broadcastGame(g);
+}
+
+function closeGame(g) {
+  if (g.el) g.el.remove();
+  games.delete(g.id);
+  if (session) session.broadcast({ type: "game", op: "close", id: g.id });
+}
+
+function gameMessage(g) {
+  return { type: "game", op: "upsert", game: { id: g.id, type: g.type, cells: g.cells, turn: g.turn, seats: g.seats, winner: g.winner, nx: g.nx, ny: g.ny } };
+}
+
+function broadcastGame(g) {
+  if (session && g) session.broadcast(gameMessage(g));
+}
+
+function handleGameMessage(data) {
+  if (data.op === "upsert" && data.game) upsertGame(data.game, false);
+  else if (data.op === "close" && data.id) {
+    const g = games.get(String(data.id));
+    if (g) { if (g.el) g.el.remove(); games.delete(g.id); }
+  }
+}
+
+function positionGame(g) {
+  if (!g.el) return;
+  g.el.style.left = g.nx * stage.clientWidth + "px";
+  g.el.style.top = g.ny * stage.clientHeight + "px";
+}
+
+function startGameDrag(e, id) {
+  if (e.target.closest("button")) return; // a tool click, not a drag
+  const g = games.get(id);
+  if (!g) return;
+  e.preventDefault();
+  const rect = stage.getBoundingClientRect();
+  gameDrag = { id, offX: e.clientX - rect.left - g.nx * stage.clientWidth, offY: e.clientY - rect.top - g.ny * stage.clientHeight, last: 0 };
+  g.el.classList.add("dragging");
+  window.addEventListener("pointermove", onGameDragMove);
+  window.addEventListener("pointerup", onGameDragEnd, { once: true });
+}
+
+function onGameDragMove(e) {
+  if (!gameDrag) return;
+  const g = games.get(gameDrag.id);
+  if (!g) return;
+  const rect = stage.getBoundingClientRect();
+  g.nx = clamp01((e.clientX - rect.left - gameDrag.offX) / stage.clientWidth);
+  g.ny = clamp01((e.clientY - rect.top - gameDrag.offY) / stage.clientHeight);
+  positionGame(g);
+  const now = e.timeStamp || 0;
+  if (now - gameDrag.last > 80) { gameDrag.last = now; broadcastGame(g); }
+}
+
+function onGameDragEnd() {
+  window.removeEventListener("pointermove", onGameDragMove);
+  if (!gameDrag) return;
+  const g = games.get(gameDrag.id);
+  gameDrag = null;
+  if (g) { g.el.classList.remove("dragging"); broadcastGame(g); }
+}
+
 // ---- Huddle zones ----
 
 function zoneMessage(z) {
@@ -2749,6 +2996,7 @@ function onResize() {
   cards.forEach(positionCard);
   if (heldCardId) carryCardToMe(); // keep the held card snapped to our hands
   zones.forEach(positionZone);
+  games.forEach(positionGame);
   sizeDrawCanvas();
 }
 
@@ -2893,12 +3141,13 @@ window.__stopScreen = () => stopSharing();
 window.__draw = () => strokes.size; // debug: count of whiteboard strokes
 window.__ball = () => (ball ? { ...ball } : null); // debug: ball state
 window.__tag = () => tagIt; // debug: who is "it"
+window.__games = () => [...games.values()].map((g) => ({ id: g.id, type: g.type, cells: g.cells, turn: g.turn, seats: g.seats, winner: g.winner })); // debug
 window.__myid = () => myMeshId; // debug: our mesh id
 
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
   if (!running || drawMode) return; // in draw mode, clicks are ink, not emoji throws
-  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, #calibrate, .card, button, input, textarea, a")) return;
+  if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, #calibrate, .card, .game, button, input, textarea, a")) return;
   const rect = stage.getBoundingClientRect();
   throwEmoji(e.clientX - rect.left, e.clientY - rect.top);
 }
