@@ -49,6 +49,7 @@ body {
   /* Position is driven via the `translate` property, leaving `transform` free
      for one-shot emote animations (jump etc.). */
   will-change: transform, translate;
+  transition: scale 0.18s ease; /* smooth spotlight scale (not position) */
 }
 
 .head {
@@ -68,6 +69,21 @@ body {
     0 8px 30px rgba(0, 0, 0, 0.45),
     0 0 0 3px rgba(70, 210, 127, 0.95),
     0 0 18px 5px rgba(70, 210, 127, 0.5);
+}
+
+/* Spotlight the active speaker: a bigger, brighter glow + a gentle scale-up +
+   raised z-order, fading in/out as they start/stop. (scale is its own property,
+   so it composes with the translate-based position and emote transforms.) */
+.tile.spotlight {
+  scale: 1.09;
+  z-index: 4;
+}
+
+.tile.spotlight .head {
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.5),
+    0 0 0 4px rgba(90, 230, 150, 1),
+    0 0 34px 12px rgba(70, 210, 127, 0.7);
 }
 
 .head video {
