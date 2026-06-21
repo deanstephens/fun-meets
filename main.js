@@ -64,6 +64,8 @@ const toggleSpatialBtn = document.getElementById("toggle-spatial");
 const toggleCollisionBtn = document.getElementById("toggle-collision");
 const toggleSfxBtn = document.getElementById("toggle-sfx");
 let sfxOn = true; // sound effects; loaded from localStorage at init
+const toggleSpotlightBtn = document.getElementById("toggle-spotlight");
+let spotlightOn = true; // emphasise the active speaker's tile; loaded at init
 const statusInput = document.getElementById("status-input");
 const selfStatusEl = document.getElementById("self-status");
 const toggleScreenBtn = document.getElementById("toggle-screen");
@@ -1137,10 +1139,17 @@ function loop(timestamp) {
   if (zones.size) zones.forEach((z) => z.el.classList.toggle("mine", z === myZone));
   spatialAudio.update((id) => peerTargetGain(id, myZone));
 
-  // Voice activity -> "talking" ring on whoever is speaking.
+  // Voice activity -> "talking" ring on whoever is speaking, plus a stronger
+  // "spotlight" (scale + glow) when that mode is on.
   voiceActivity.poll(timestamp);
-  selfTile.classList.toggle("talking", voiceActivity.isSpeaking("self"));
-  remoteTiles.forEach((tile, id) => tile.el.classList.toggle("talking", voiceActivity.isSpeaking(id)));
+  const selfTalking = voiceActivity.isSpeaking("self");
+  selfTile.classList.toggle("talking", selfTalking);
+  selfTile.classList.toggle("spotlight", spotlightOn && selfTalking);
+  remoteTiles.forEach((tile, id) => {
+    const talking = voiceActivity.isSpeaking(id);
+    tile.el.classList.toggle("talking", talking);
+    tile.el.classList.toggle("spotlight", spotlightOn && talking);
+  });
 
   requestAnimationFrame(loop);
 }
@@ -1771,6 +1780,25 @@ function toggleSfx() {
   try { localStorage.setItem("funmeets-sfx", sfxOn ? "on" : "off"); } catch (_) {}
   updateSfxBtn();
   if (sfxOn) sfx("dice"); // brief confirmation it's on
+}
+
+function loadSpotlightPref() {
+  try { return localStorage.getItem("funmeets-spotlight") !== "off"; } catch (_) { return true; }
+}
+
+function updateSpotlightBtn() {
+  toggleSpotlightBtn.textContent = "Spotlight speaker: " + (spotlightOn ? "On" : "Off");
+  toggleSpotlightBtn.classList.toggle("active", spotlightOn);
+}
+
+function toggleSpotlight() {
+  spotlightOn = !spotlightOn;
+  try { localStorage.setItem("funmeets-spotlight", spotlightOn ? "on" : "off"); } catch (_) {}
+  updateSpotlightBtn();
+  if (!spotlightOn) { // clear any active spotlight immediately
+    selfTile.classList.remove("spotlight");
+    remoteTiles.forEach((tile) => tile.el.classList.remove("spotlight"));
+  }
 }
 
 // ---- Confetti bursts (wins / poll close) ----
@@ -3538,6 +3566,9 @@ updateHandBtn();
 toggleSfxBtn.addEventListener("click", toggleSfx);
 sfxOn = loadSfxPref();
 updateSfxBtn();
+toggleSpotlightBtn.addEventListener("click", toggleSpotlight);
+spotlightOn = loadSpotlightPref();
+updateSpotlightBtn();
 setInterval(pollQuality, 3000); // per-peer connection-quality pips (no-ops until connected)
 
 // ---- Sidebar: slide the whole panel off-screen and back ----
