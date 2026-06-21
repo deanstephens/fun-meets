@@ -88,7 +88,14 @@
       <span><strong id="peer-count">0</strong> connected</span>
       <button id="copy-link" class="ghost">Copy invite link</button>
       <button id="toggle-mic" class="ghost">Mute</button>
+      <button id="toggle-hand" class="ghost">Raise hand</button>
       <button id="toggle-screen" class="ghost">Share screen</button>
+    </div>
+
+    <!-- Ordered queue of raised hands (shown when at least one hand is up) -->
+    <div id="hands-panel" class="hands-panel" hidden>
+      <div class="hands-title">✋ Hands</div>
+      <ol id="hands-list" class="hands-list"></ol>
     </div>
 
     <!-- Your movable webcam tile (the .head is the webcam; the stick-figure
@@ -98,6 +105,7 @@
         <video id="self-video" autoplay playsinline muted></video>
       </div>
       <div class="tile-mute" aria-label="Muted">🔇</div>
+      <div class="tile-hand" aria-label="Hand raised">✋</div>
       <div class="tile-label">
         <span class="tile-name">You</span>
         <span class="tile-status empty" id="self-status"></span>
