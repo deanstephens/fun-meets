@@ -258,6 +258,15 @@ The long-term direction is to grow the meeting from "a call you can move your we
   between updates so motion stays smooth and consistent. Late joiners see the
   ball where it is.
 
+### Milestone 33 — Tag minigame ✅
+- A **Tag: start** action kicks off a game of tag — you become **"it"** (a red
+  pulsing ring + "IT" badge on your avatar). **Touch another avatar to pass it
+  on**; a short grace period stops instant tag-backs. The **host runs the game**
+  (detecting tags from the synced positions) and broadcasts who's "it", so
+  everyone — including late joiners — sees the same state. The tag reach is set
+  above the collision distance, so it still works with avatar collision on.
+  **Tag: stop** ends it.
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -274,7 +283,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–32 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), host re-election when the entry-point peer leaves, and reconnection that rides out transient network blips.
+🚧 Early development. Milestones 1–33 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), host re-election when the entry-point peer leaves, and reconnection that rides out transient network blips.
 
 ## Getting Started
 

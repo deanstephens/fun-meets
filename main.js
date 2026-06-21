@@ -381,6 +381,7 @@ async function start() {
         session.sendTo(id, { type: "collision", on: collisionOn });
         if (strokes.size) session.sendTo(id, { type: "draw", op: "sync", strokes: [...strokes.values()] });
         if (ball) session.sendTo(id, { type: "ball", op: "state", nx: ball.nx, ny: ball.ny, vx: ball.vx, vy: ball.vy });
+        if (tagIt) session.sendTo(id, { type: "tag", op: "set", it: tagIt });
         if (poll) session.sendTo(id, {
           type: "poll", op: "sync",
           poll: { id: poll.id, question: poll.question, options: poll.options },
@@ -443,6 +444,8 @@ async function start() {
         handleDrawMessage(data); // shared whiteboard strokes
       } else if (data.type === "ball") {
         handleBallMessage(data); // kickable shared ball
+      } else if (data.type === "tag") {
+        handleTagMessage(data); // tag minigame state
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -875,6 +878,9 @@ function loop(timestamp) {
 
   // Advance the shared ball (host simulates, everyone renders).
   stepBall(dt, timestamp);
+
+  // Tag minigame: host checks for tags; everyone refreshes the "it" indicator.
+  stepTag(timestamp);
 
   // Which huddle zone we're in (highlight it), then update spatial-audio
   // volumes from positions + zone membership. Cheap; runs every frame so it
@@ -1547,6 +1553,65 @@ function handlePollMessage(data) {
   }
 }
 
+// ---- Tag minigame (host-authoritative) ----
+// One player is "it"; when their avatar touches another, "it" transfers. The
+// host owns the state and detects tags from the synced avatar positions.
+
+let tagIt = null; // mesh id of the "it" player, or null when no game
+let tagCooldownUntil = 0; // host: pause tagging just after a transfer
+const TAG_COOLDOWN = 1200; // ms grace so you don't instantly tag back
+const TAG_DIST_FACTOR = 0.95; // ×tile size; > collision min-distance so tag works with collision on
+
+function updateTagIndicators() {
+  selfTile.classList.toggle("it", !!tagIt && tagIt === myMeshId);
+  remoteTiles.forEach((tile, id) => tile.el.classList.toggle("it", tagIt === id));
+}
+
+function setTagIt(id, broadcast) {
+  tagIt = id || null;
+  updateTagIndicators();
+  if (broadcast && session) session.broadcast({ type: "tag", op: "set", it: tagIt });
+}
+
+function startTag() {
+  setTagIt(myMeshId, true); // you start the game as "it"
+}
+
+function stopTag(broadcast) {
+  tagIt = null;
+  updateTagIndicators();
+  if (broadcast && session) session.broadcast({ type: "tag", op: "stop" });
+}
+
+function handleTagMessage(data) {
+  if (data.op === "set") {
+    tagIt = typeof data.it === "string" ? data.it : null;
+    updateTagIndicators();
+  } else if (data.op === "stop") {
+    stopTag(false);
+  }
+}
+
+// Host: if the "it" avatar touches another, transfer "it" to them.
+function stepTag(timestamp) {
+  updateTagIndicators(); // cheap; keeps new/left tiles in sync
+  if (!amHost || !tagIt || timestamp < tagCooldownUntil) return;
+  const itCenter = tagIt === myMeshId ? localCenter()
+    : (remoteTiles.has(tagIt) ? remoteCenter(tagIt) : null);
+  if (!itCenter) { setTagIt(myMeshId, true); return; } // the "it" player left — take it over
+  const dist = tileSize() * TAG_DIST_FACTOR;
+  const others = [];
+  if (tagIt !== myMeshId) others.push({ id: myMeshId, c: localCenter() });
+  remoteTiles.forEach((_, id) => { if (id !== tagIt) others.push({ id, c: remoteCenter(id) }); });
+  for (const o of others) {
+    if (Math.hypot(itCenter.x - o.c.x, itCenter.y - o.c.y) < dist) {
+      setTagIt(o.id, true);
+      tagCooldownUntil = timestamp + TAG_COOLDOWN;
+      break;
+    }
+  }
+}
+
 // ---- Kickable ball (host-authoritative physics) ----
 // The host integrates position + velocity, bounces the ball off walls and
 // avatars, and broadcasts state; guests dead-reckon (integrate + friction)
@@ -2040,6 +2105,18 @@ const ACTIONS = [
     label: "Ball: remove",
     description: "Remove the kickable ball",
     run: () => removeBall(true),
+  },
+  {
+    id: "start-tag",
+    label: "Tag: start (you're it)",
+    description: "Start a game of tag — touch someone to pass it on",
+    run: startTag,
+  },
+  {
+    id: "stop-tag",
+    label: "Tag: stop",
+    description: "End the tag game",
+    run: () => stopTag(true),
   },
   {
     id: "create-card",
@@ -2759,6 +2836,8 @@ window.__shareScreen = (stream) => startSharing(stream);
 window.__stopScreen = () => stopSharing();
 window.__draw = () => strokes.size; // debug: count of whiteboard strokes
 window.__ball = () => (ball ? { ...ball } : null); // debug: ball state
+window.__tag = () => tagIt; // debug: who is "it"
+window.__myid = () => myMeshId; // debug: our mesh id
 
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
