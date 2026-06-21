@@ -305,12 +305,15 @@ The long-term direction is to grow the meeting from "a call you can move your we
   broadcast like presence and handed to **late joiners** — and your own button
   reads **Unmute**. The choice **persists across reloads**.
 
-### Milestone 39 — Touch controls ✅
+### Milestone 39 — Touch controls + collapsible sidebar ✅
 - On touch / coarse-pointer devices (or with **`?touch=1`**), an **on-screen
   joystick** drives your avatar (analog — a partial push gives partial speed,
   blended with WASD), and a small button bar gives touch access to the
   keyboard-only bits: **≡** opens the actions menu, **💬** opens chat, **✋**
   picks up / drops a card. Desktop/keyboard behaviour is unchanged.
+- The whole **right sidebar can slide fully off-screen** via an edge tab, and
+  **defaults collapsed on small/touch screens** so the canvas isn't covered —
+  pull it back in on demand. Defaults open on desktop.
 
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).

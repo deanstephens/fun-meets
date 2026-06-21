@@ -846,6 +846,34 @@ body {
   z-index: 7;
   /* transparent gaps let clicks fall through to the stage */
   pointer-events: none;
+  transition: transform 0.25s ease;
+}
+
+/* Collapsed: slide the whole sidebar off-screen (the edge tab stays visible). */
+body.sidebar-collapsed .sidebar {
+  transform: translateX(100%);
+}
+
+.sidebar-toggle {
+  position: absolute;
+  left: -34px;
+  top: 12px;
+  width: 32px;
+  height: 46px;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px 0 0 10px;
+  background: rgba(12, 14, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: none;
+  color: #eef0ff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar[hidden] {

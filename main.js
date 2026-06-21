@@ -3297,6 +3297,22 @@ document.getElementById("draw-done").addEventListener("click", exitDraw);
 toggleScreenBtn.addEventListener("click", toggleScreen);
 toggleMicBtn.addEventListener("click", toggleMute);
 
+// ---- Sidebar: slide the whole panel off-screen and back ----
+const sidebarToggleBtn = document.getElementById("sidebar-toggle");
+function updateSidebarToggle() {
+  // Collapsed → a "pull-in" arrow at the screen edge; open → a "push-out" arrow.
+  sidebarToggleBtn.textContent = document.body.classList.contains("sidebar-collapsed") ? "‹" : "›";
+}
+sidebarToggleBtn.addEventListener("click", () => {
+  document.body.classList.toggle("sidebar-collapsed");
+  updateSidebarToggle();
+});
+// Default it collapsed on small / touch screens so the canvas isn't covered.
+if ((window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || window.innerWidth < 760) {
+  document.body.classList.add("sidebar-collapsed");
+}
+updateSidebarToggle();
+
 // ---- Touch controls (joystick + buttons), shown on coarse-pointer devices ----
 (function initTouch() {
   const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
