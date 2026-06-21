@@ -75,6 +75,18 @@ const HOST_TIMEOUT_MS = 8000;
 const RECONNECT_GRACE_MS = 25000;
 const RECONNECT_RETRY_MS = 3000;
 
+// Presence heartbeat: every peer pings this often over the data channel; if a
+// peer goes silent past the timeout we treat it as a blip ("reconnecting" +
+// re-dial) rather than a departure. Membership is thus explicit (pings / an
+// explicit "bye") instead of inferred from a transport-level close — so a very
+// brief blip that closes the data channel no longer drops-and-rejoins.
+const PRESENCE_BEAT_MS = 2500;
+const PRESENCE_TIMEOUT_MS = 7000;
+// On a data-channel close, wait this long for a "bye" to arrive before deciding
+// it's a blip. A clean leave sends a bye (→ immediate drop), so the bye wins
+// this short window instead of racing the close event (which it would lose).
+const BYE_GRACE_MS = 800;
+
 export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft, onPeerJoin, onMessage, onPeerStatus, onLog, onScreenStream, onScreenStop }) {
   const hostId = ROOM_PREFIX + room + "-host";
 
@@ -91,6 +103,9 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     reelectTimer: null, // pending claim/bootstrap retry
     connections: new Map(), // peerId -> DataConnection
     connecting: new Set(), // peerIds currently being dialed
+    lastSeen: new Map(), // peerId -> last time we heard anything from them
+    presenceTimer: null, // our presence-ping interval
+    presenceCheck: null, // checks peers for presence silence
     calls: new Map(), // peerId -> MediaConnection (webcam)
     everConnected: new Set(), // peerIds whose media ICE reached connected
     dialTimers: new Map(), // peerId -> dial-timeout handle
@@ -109,6 +124,36 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
 
   function reportStatus(id, s) {
     if (onPeerStatus) onPeerStatus(id, s);
+  }
+
+  // Note we just heard from a peer; if mid-reconnect, check if we've fully recovered.
+  function seen(id) {
+    state.lastSeen.set(id, Date.now());
+    if (state.reconnect.has(id)) maybeRecovered(id);
+  }
+
+  function mediaConnected(id) {
+    const call = state.calls.get(id);
+    const pc = call && call.peerConnection;
+    return !!(pc && (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed"));
+  }
+
+  function dataOpen(id) {
+    const c = state.connections.get(id);
+    return !!(c && c.open);
+  }
+
+  // Clear a reconnect only when BOTH the data channel and media are healthy
+  // again. Clearing on just one (e.g. media reconnecting while the data channel
+  // is still down) would stop the re-dial and leave the peer half-connected,
+  // which then re-trips the presence timeout — the flapping #52 first shipped.
+  function maybeRecovered(id) {
+    if (!state.reconnect.has(id)) return;
+    if (dataOpen(id) && mediaConnected(id)) {
+      log("recovered ->", id);
+      clearReconnect(id);
+      reportStatus(id, "connected");
+    }
   }
 
   function armDialTimeout(id) {
@@ -171,6 +216,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       state.connecting.delete(conn.peer);
       state.connections.set(conn.peer, conn);
       clearDialTimeout(conn.peer);
+      seen(conn.peer); // also recovers us from a reconnect if this is a re-dial
       log("data open <->", conn.peer);
       // Tell EVERYONE (including the newcomer) the current roster, so existing
       // peers learn about later joiners — not just whoever connects to them.
@@ -187,6 +233,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     });
     conn.on("data", (msg) => {
       if (!msg) return;
+      seen(conn.peer); // any traffic proves the peer is present
       if (msg.type === "roster" && Array.isArray(msg.peers)) {
         msg.peers.forEach((id) => tryConnect(id));
       } else if (msg.type === "host" && msg.id) {
@@ -194,12 +241,33 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
         // it's still alive.
         state.hostMeshId = msg.id;
         state.lastHostBeat = Date.now();
+      } else if (msg.type === "bye") {
+        // An explicit clean leave — drop immediately (don't wait out the grace).
+        log("bye <-", conn.peer);
+        dropPeer(conn.peer);
+      } else if (msg.type === "alive") {
+        // Presence ping — seen() above already recorded it.
       } else if (msg.type === "app") {
         // Application-level payload (position updates, future game state, …).
         if (onMessage) onMessage(conn.peer, msg.data);
       }
     });
-    conn.on("close", () => dropPeer(conn.peer));
+    // A data-channel close may be a brief blip OR a clean leave. We don't drop
+    // on it directly: a clean leave drops us via its "bye"; otherwise, after a
+    // short grace (long enough for that bye to land), treat it as a blip and
+    // recover (reconnecting + re-dial). A never-fully-connected peer closing is
+    // a genuine failure, so drop it.
+    conn.on("close", () => {
+      const id = conn.peer;
+      if (!state.everConnected.has(id)) { dropPeer(id); return; }
+      setTimeout(() => {
+        if (state.closed) return;
+        if (!state.everConnected.has(id)) return; // a bye already dropped it
+        const cur = state.connections.get(id);
+        if (cur && cur.open) return; // already re-dialed and back
+        startReconnect(id, true);
+      }, BYE_GRACE_MS);
+    });
     conn.on("error", (e) => {
       log("data error", conn.peer, e && e.type);
       state.connecting.delete(conn.peer);
@@ -253,8 +321,11 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
         if (s === "connected" || s === "completed") {
           state.everConnected.add(call.peer);
           clearDialTimeout(call.peer);
-          clearReconnect(call.peer); // recovered (self-heal or re-dial)
-          reportStatus(call.peer, "connected");
+          if (state.reconnect.has(call.peer)) {
+            maybeRecovered(call.peer); // only clears once data is back too
+          } else {
+            reportStatus(call.peer, "connected");
+          }
         } else if (s === "disconnected" || s === "failed") {
           // A blip. Show "reconnecting" and recover: ICE may self-heal, and we
           // also re-dial (a quick self-heal cancels the re-dial before it
@@ -304,15 +375,30 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
   function scheduleRedial(id) {
     const e = state.reconnect.get(id);
     if (!e || e.retryTimer) return;
-    e.retryTimer = setInterval(() => {
+    const redial = () => {
       if (state.closed || !state.reconnect.has(id)) return;
-      log("re-dial ->", id);
-      if (state.calls.has(id)) {
-        try { state.calls.get(id).close(); } catch (_) {}
-        state.calls.delete(id);
+      // Only re-dial what's actually down, so a data-only blip doesn't tear
+      // down (and flap) a healthy media call, and vice-versa.
+      const needMedia = !mediaConnected(id);
+      const needData = !dataOpen(id) && !state.connecting.has(id);
+      if (!needMedia && !needData) { maybeRecovered(id); return; }
+      log("re-dial ->", id, needMedia ? "media" : "", needData ? "data" : "");
+      if (needMedia) {
+        if (state.calls.has(id)) {
+          try { state.calls.get(id).close(); } catch (_) {}
+          state.calls.delete(id);
+        }
+        placeCall(id);
       }
-      placeCall(id);
-    }, RECONNECT_RETRY_MS);
+      if (needData) {
+        const c = state.connections.get(id);
+        if (c) { try { c.close(); } catch (_) {} }
+        state.connections.delete(id);
+        tryConnect(id);
+      }
+    };
+    redial(); // attempt straight away, then keep retrying
+    e.retryTimer = setInterval(redial, RECONNECT_RETRY_MS);
   }
 
   function clearReconnect(id) {
@@ -342,6 +428,7 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     }
     state.connecting.delete(id);
     state.everConnected.delete(id);
+    state.lastSeen.delete(id);
     clearDialTimeout(id);
     if (changed) {
       log("peer left", id);
@@ -522,6 +609,33 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     });
   }
 
+  // Presence: every peer pings so others know it's still here even when idle.
+  function startPresenceBeat() {
+    if (state.presenceTimer) return;
+    state.presenceTimer = setInterval(() => {
+      if (state.closed) return;
+      broadcastToMesh({ type: "alive", id: state.myId });
+    }, PRESENCE_BEAT_MS);
+  }
+
+  // If a connected peer goes silent past the timeout, treat it as a blip:
+  // reconnecting + re-dial (the grace then drops it if it never returns). This
+  // catches blips that don't fire a close event (e.g. an idle peer's Wi-Fi drop).
+  function startPresenceCheck() {
+    if (state.presenceCheck) return;
+    state.presenceCheck = setInterval(() => {
+      if (state.closed) return;
+      const now = Date.now();
+      state.connections.forEach((c, id) => {
+        const last = state.lastSeen.get(id) || 0;
+        if (now - last > PRESENCE_TIMEOUT_MS && !state.reconnect.has(id)) {
+          log("presence timeout ->", id);
+          startReconnect(id, true);
+        }
+      });
+    }, 1500);
+  }
+
   // Start: take a random mesh id, then become host or bootstrap.
   const peer = new Peer(undefined, PEER_OPTS);
   state.peer = peer;
@@ -530,6 +644,8 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
     log("mesh id", id);
     wireCommon();
     startLivenessCheck();
+    startPresenceBeat();
+    startPresenceCheck();
     emitStatus();
     claimHost(); // claim the introducer (become host); if taken, bootstrap off it
   });
@@ -571,10 +687,15 @@ export function joinRoom({ room, localStream, onStatus, onPeerStream, onPeerLeft
       state.screenCalls.clear();
     },
     leave() {
+      // Best-effort explicit departure so peers drop us promptly instead of
+      // waiting out the presence/reconnect grace.
+      try { broadcastToMesh({ type: "bye", id: state.myId }); } catch (_) {}
       state.closed = true;
       if (state.reelectTimer) { clearTimeout(state.reelectTimer); state.reelectTimer = null; }
       if (state.beatTimer) { clearInterval(state.beatTimer); state.beatTimer = null; }
       if (state.livenessTimer) { clearInterval(state.livenessTimer); state.livenessTimer = null; }
+      if (state.presenceTimer) { clearInterval(state.presenceTimer); state.presenceTimer = null; }
+      if (state.presenceCheck) { clearInterval(state.presenceCheck); state.presenceCheck = null; }
       state.reconnect.forEach((e) => { clearTimeout(e.graceTimer); if (e.retryTimer) clearInterval(e.retryTimer); });
       state.reconnect.clear();
       state.dialTimers.forEach((t) => clearTimeout(t));

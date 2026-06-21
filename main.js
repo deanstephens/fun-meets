@@ -2996,8 +2996,16 @@ renderConsolePeers(); // show "(none)" until peers connect
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("resize", onResize);
-window.addEventListener("beforeunload", () => {
+// Leave cleanly on unload so peers get our "bye" and drop us promptly. Both
+// events fire best-effort (pagehide is more reliable on mobile/Safari); guard
+// so we only do it once.
+let leftPage = false;
+function leavePage() {
+  if (leftPage) return;
+  leftPage = true;
   if (screenStream) stopSharing();
   if (session) session.leave();
   if (faceFramer) faceFramer.stop();
-});
+}
+window.addEventListener("beforeunload", leavePage);
+window.addEventListener("pagehide", leavePage);
