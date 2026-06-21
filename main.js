@@ -82,6 +82,7 @@ const avatarList = document.getElementById("avatar-list");
 // Actions / cards / zones elements
 const zoneLayer = document.getElementById("zone-layer");
 const cardLayer = document.getElementById("card-layer");
+const ballEl = document.getElementById("ball");
 const drawCanvas = document.getElementById("draw-layer");
 const drawCtx = drawCanvas.getContext("2d");
 const drawTools = document.getElementById("draw-tools");
@@ -379,6 +380,7 @@ async function start() {
         if (rem > 0) session.sendTo(id, { type: "timer", op: "start", remaining: rem });
         session.sendTo(id, { type: "collision", on: collisionOn });
         if (strokes.size) session.sendTo(id, { type: "draw", op: "sync", strokes: [...strokes.values()] });
+        if (ball) session.sendTo(id, { type: "ball", op: "state", nx: ball.nx, ny: ball.ny, vx: ball.vx, vy: ball.vy });
         if (poll) session.sendTo(id, {
           type: "poll", op: "sync",
           poll: { id: poll.id, question: poll.question, options: poll.options },
@@ -439,6 +441,8 @@ async function start() {
         setCollision(data.on); // room-wide setting from the host
       } else if (data.type === "draw") {
         handleDrawMessage(data); // shared whiteboard strokes
+      } else if (data.type === "ball") {
+        handleBallMessage(data); // kickable shared ball
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -868,6 +872,9 @@ function loop(timestamp) {
     if (heldCardId) broadcastCard(cards.get(heldCardId));
     wasMoving = false;
   }
+
+  // Advance the shared ball (host simulates, everyone renders).
+  stepBall(dt, timestamp);
 
   // Which huddle zone we're in (highlight it), then update spatial-audio
   // volumes from positions + zone membership. Cheap; runs every frame so it
@@ -1540,6 +1547,116 @@ function handlePollMessage(data) {
   }
 }
 
+// ---- Kickable ball (host-authoritative physics) ----
+// The host integrates position + velocity, bounces the ball off walls and
+// avatars, and broadcasts state; guests dead-reckon (integrate + friction)
+// between updates and snap to each authoritative state. Coords are normalized.
+
+let ball = null; // { nx, ny, vx, vy }  pos normalized, velocity normalized/sec
+let lastBallSent = 0;
+let ballWasMoving = false;
+const BALL_RADIUS = 22; // px
+const BALL_FRICTION = 1.25; // per-second exponential velocity decay
+const BALL_WALL_BOUNCE = 0.7; // energy kept on a wall bounce
+const BALL_KICK = 540; // px/s imparted when an avatar touches the ball
+const BALL_STOP = 12; // px/s below which it stops
+const BALL_INTERVAL = 70; // ms between host state broadcasts
+
+function avatarCenters() {
+  const list = [localCenter()];
+  remoteTiles.forEach((_, id) => list.push(remoteCenter(id)));
+  return list;
+}
+
+function positionBall() {
+  if (!ball) return;
+  ballEl.style.left = ball.nx * 100 + "%";
+  ballEl.style.top = ball.ny * 100 + "%";
+}
+
+// Advance the ball one frame. The host is authoritative (walls, avatar
+// collisions, broadcast); everyone integrates + applies friction for smoothness.
+function stepBall(dt, timestamp) {
+  if (!ball) return;
+  const W = stage.clientWidth, H = stage.clientHeight;
+  let x = ball.nx * W, y = ball.ny * H;
+  let vx = ball.vx * W, vy = ball.vy * H; // px/s
+  x += vx * dt;
+  y += vy * dt;
+  const decay = Math.exp(-BALL_FRICTION * dt);
+  vx *= decay;
+  vy *= decay;
+  if (amHost) {
+    const r = BALL_RADIUS;
+    if (x < r) { x = r; vx = Math.abs(vx) * BALL_WALL_BOUNCE; }
+    else if (x > W - r) { x = W - r; vx = -Math.abs(vx) * BALL_WALL_BOUNCE; }
+    if (y < r) { y = r; vy = Math.abs(vy) * BALL_WALL_BOUNCE; }
+    else if (y > H - r) { y = H - r; vy = -Math.abs(vy) * BALL_WALL_BOUNCE; }
+    const ar = tileSize() * 0.45;
+    avatarCenters().forEach((c) => {
+      const dx = x - c.x, dy = y - c.y;
+      const d = Math.hypot(dx, dy);
+      const minD = r + ar;
+      if (d < minD && d > 0.01) {
+        const ux = dx / d, uy = dy / d;
+        x = c.x + ux * minD; // push the ball clear of the avatar
+        y = c.y + uy * minD;
+        const sp = Math.max(BALL_KICK, Math.hypot(vx, vy)); // kick it away
+        vx = ux * sp;
+        vy = uy * sp;
+      }
+    });
+    if (Math.hypot(vx, vy) < BALL_STOP) { vx = 0; vy = 0; }
+  }
+  ball.nx = clamp01(x / W);
+  ball.ny = clamp01(y / H);
+  ball.vx = vx / W;
+  ball.vy = vy / H;
+  positionBall();
+  if (amHost) {
+    const moving = vx !== 0 || vy !== 0;
+    if (moving || ballWasMoving) {
+      if (timestamp - lastBallSent >= BALL_INTERVAL || (!moving && ballWasMoving)) {
+        lastBallSent = timestamp;
+        if (session) session.broadcast({ type: "ball", op: "state", nx: ball.nx, ny: ball.ny, vx: ball.vx, vy: ball.vy });
+      }
+      ballWasMoving = moving;
+    }
+  }
+}
+
+function spawnBall(nx, ny, broadcast) {
+  ball = { nx: clamp01(nx), ny: clamp01(ny), vx: 0, vy: 0 };
+  ballEl.hidden = false;
+  positionBall();
+  if (broadcast && session) session.broadcast({ type: "ball", op: "spawn", nx: ball.nx, ny: ball.ny });
+}
+
+function spawnBallAction() {
+  spawnBall(0.5, 0.5, true); // spawn / reset at the centre, at rest
+}
+
+function removeBall(broadcast) {
+  ball = null;
+  ballEl.hidden = true;
+  if (broadcast && session) session.broadcast({ type: "ball", op: "remove" });
+}
+
+function handleBallMessage(data) {
+  if (data.op === "spawn") {
+    spawnBall(+data.nx || 0.5, +data.ny || 0.5, false);
+  } else if (data.op === "state") {
+    if (!ball) { ball = { nx: 0.5, ny: 0.5, vx: 0, vy: 0 }; ballEl.hidden = false; }
+    ball.nx = clamp01(+data.nx || 0);
+    ball.ny = clamp01(+data.ny || 0);
+    ball.vx = +data.vx || 0;
+    ball.vy = +data.vy || 0;
+    positionBall();
+  } else if (data.op === "remove") {
+    removeBall(false);
+  }
+}
+
 // ---- Whiteboard (shared freehand drawing) ----
 // Strokes are stored as vector data (normalized points) so they redraw on
 // resize and can be handed to late joiners; rendered onto a canvas layer.
@@ -1911,6 +2028,18 @@ const ACTIONS = [
     label: "Whiteboard",
     description: "Draw freehand on the shared board",
     run: toggleDraw,
+  },
+  {
+    id: "spawn-ball",
+    label: "Ball: spawn / reset",
+    description: "Drop a kickable ball in the middle (or reset it there)",
+    run: spawnBallAction,
+  },
+  {
+    id: "remove-ball",
+    label: "Ball: remove",
+    description: "Remove the kickable ball",
+    run: () => removeBall(true),
   },
   {
     id: "create-card",
@@ -2629,6 +2758,7 @@ function updateScreenBtn() {
 window.__shareScreen = (stream) => startSharing(stream);
 window.__stopScreen = () => stopSharing();
 window.__draw = () => strokes.size; // debug: count of whiteboard strokes
+window.__ball = () => (ball ? { ...ball } : null); // debug: ball state
 
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {

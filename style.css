@@ -1249,6 +1249,28 @@ body {
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
+/* ---- Kickable ball ---- */
+.ball {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  font-size: 38px;
+  line-height: 44px;
+  text-align: center;
+  z-index: 4;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45));
+  user-select: none;
+}
+
+.ball[hidden] {
+  display: none;
+}
+
 /* ---- Whiteboard ---- */
 /* Ink sits on the board behind avatars; in draw mode the canvas lifts to the
    front and captures the pointer so you can sketch anywhere. */
