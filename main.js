@@ -3313,6 +3313,24 @@ if ((window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || win
 }
 updateSidebarToggle();
 
+// Size/position the stage to the *visible* viewport (fixes iOS: 100vh bottom
+// cut-off, and the soft keyboard shifting the layout — when the keyboard opens
+// the visualViewport shrinks, so the stage shrinks and the bottom UI rides up
+// above the keyboard instead of being pushed off-screen).
+function syncViewport() {
+  const vv = window.visualViewport;
+  const root = document.documentElement.style;
+  root.setProperty("--app-h", (vv ? vv.height : window.innerHeight) + "px");
+  root.setProperty("--app-top", (vv ? vv.offsetTop : 0) + "px");
+}
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", syncViewport);
+  visualViewport.addEventListener("scroll", syncViewport);
+}
+window.addEventListener("resize", syncViewport);
+window.addEventListener("orientationchange", () => setTimeout(syncViewport, 250));
+syncViewport();
+
 // ---- Touch controls (joystick + buttons), shown on coarse-pointer devices ----
 (function initTouch() {
   const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
@@ -3354,7 +3372,12 @@ updateSidebarToggle();
 
   document.getElementById("touch-actions").addEventListener("click", () => { if (running) openActions(); });
   document.getElementById("touch-carry").addEventListener("click", () => { if (running) toggleCarry(); });
-  document.getElementById("touch-chat").addEventListener("click", () => { expandChat(); chatInput.focus(); });
+  document.getElementById("touch-chat").addEventListener("click", () => {
+    document.body.classList.remove("sidebar-collapsed"); // chat lives in the sidebar
+    updateSidebarToggle();
+    expandChat();
+    chatInput.focus();
+  });
 })();
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.
