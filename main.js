@@ -213,6 +213,7 @@ const pos = { x: 0, y: 0 };
 
 // Which movement keys are currently held.
 const held = { up: false, down: false, left: false, right: false };
+const touchVec = { x: 0, y: 0 }; // analog movement from the on-screen joystick (-1..1)
 
 const KEY_MAP = {
   w: "up",
@@ -937,24 +938,27 @@ function loop(timestamp) {
   const dt = Math.min((timestamp - lastFrame) / 1000, 0.05); // cap large gaps
   lastFrame = timestamp;
 
-  const dx = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-  const dy = (held.down ? 1 : 0) - (held.up ? 1 : 0);
-  const pressing = dx !== 0 || dy !== 0;
+  // Movement input: keyboard (WASD, full speed) blended with the touch joystick
+  // (analog — a partial push gives partial speed).
+  const dx = (held.right ? 1 : 0) - (held.left ? 1 : 0) + touchVec.x;
+  const dy = (held.down ? 1 : 0) - (held.up ? 1 : 0) + touchVec.y;
+  const mag = Math.hypot(dx, dy);
+  const pressing = mag > 0.12;
 
   // Animate our own stick-figure body while moving.
   selfTile.classList.toggle("walking", pressing);
 
   // Face the direction of horizontal movement (keep facing when moving purely
   // vertically or standing still).
-  if (dx > 0) selfTile.classList.remove("facing-left");
-  else if (dx < 0) selfTile.classList.add("facing-left");
+  if (dx > 0.05) selfTile.classList.remove("facing-left");
+  else if (dx < -0.05) selfTile.classList.add("facing-left");
 
-  // Input velocity (normalized so diagonals aren't faster).
+  // Input velocity (normalized direction × analog magnitude, capped at 1).
   let vx = 0, vy = 0;
   if (pressing) {
-    const len = Math.hypot(dx, dy);
-    vx = (dx / len) * SPEED;
-    vy = (dy / len) * SPEED;
+    const speed = Math.min(1, mag) * SPEED;
+    vx = (dx / mag) * speed;
+    vy = (dy / mag) * speed;
   }
 
   // Apply input + any rebound velocity, then resolve collisions. Position can
@@ -986,7 +990,7 @@ function loop(timestamp) {
     if (pressing && emojiState.trail && timestamp - lastTrail >= TRAIL_INTERVAL) {
       lastTrail = timestamp;
       const c = localCenter();
-      const len = Math.hypot(dx, dy) || 1;
+      const len = mag || 1;
       spawnTrail(emojiLayer, emojiState.selected, c.x - (dx / len) * 26, c.y - (dy / len) * 26);
       if (session) session.broadcast({ type: "emoji", action: "trail", emoji: emojiState.selected });
     }
@@ -3292,6 +3296,50 @@ document.getElementById("draw-clear").addEventListener("click", () => clearDraw(
 document.getElementById("draw-done").addEventListener("click", exitDraw);
 toggleScreenBtn.addEventListener("click", toggleScreen);
 toggleMicBtn.addEventListener("click", toggleMute);
+
+// ---- Touch controls (joystick + buttons), shown on coarse-pointer devices ----
+(function initTouch() {
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const forced = new URLSearchParams(location.search).has("touch");
+  if (!coarse && !forced) return;
+  document.body.classList.add("touch");
+
+  const joy = document.getElementById("joystick");
+  const thumb = document.getElementById("joystick-thumb");
+  let pid = null, cx = 0, cy = 0, radius = 1;
+  const onDown = (e) => {
+    const r = joy.getBoundingClientRect();
+    cx = r.left + r.width / 2; cy = r.top + r.height / 2; radius = r.width / 2;
+    pid = e.pointerId;
+    try { joy.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+    onMove(e);
+  };
+  const onMove = (e) => {
+    if (pid !== e.pointerId) return;
+    const ox = e.clientX - cx, oy = e.clientY - cy;
+    const d = Math.hypot(ox, oy) || 1;
+    const c = Math.min(d, radius);
+    const nx = (ox / d) * c, ny = (oy / d) * c;
+    thumb.style.transform = `translate(${nx}px, ${ny}px)`;
+    touchVec.x = nx / radius;
+    touchVec.y = ny / radius;
+  };
+  const onUp = (e) => {
+    if (pid !== e.pointerId) return;
+    pid = null;
+    touchVec.x = 0; touchVec.y = 0;
+    thumb.style.transform = "translate(0, 0)";
+  };
+  joy.addEventListener("pointerdown", onDown);
+  joy.addEventListener("pointermove", onMove);
+  joy.addEventListener("pointerup", onUp);
+  joy.addEventListener("pointercancel", onUp);
+
+  document.getElementById("touch-actions").addEventListener("click", () => { if (running) openActions(); });
+  document.getElementById("touch-carry").addEventListener("click", () => { if (running) toggleCarry(); });
+  document.getElementById("touch-chat").addEventListener("click", () => { expandChat(); chatInput.focus(); });
+})();
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.
 if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {

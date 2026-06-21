@@ -274,6 +274,14 @@
     <div id="controls" class="controls" hidden>
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp; <kbd>E</kbd> carry card &nbsp;·&nbsp; <kbd>Enter</kbd> chat</span>
     </div>
+
+    <!-- Touch controls (shown only on touch / coarse-pointer devices) -->
+    <div id="joystick" class="joystick"><div id="joystick-thumb" class="joystick-thumb"></div></div>
+    <div id="touch-bar" class="touch-bar">
+      <button id="touch-actions" class="touch-btn" aria-label="Actions">≡</button>
+      <button id="touch-carry" class="touch-btn" aria-label="Pick up / drop card">✋</button>
+      <button id="touch-chat" class="touch-btn" aria-label="Chat">💬</button>
+    </div>
   </div>
 
   <!-- Public PeerJS broker client (signaling only; media is peer-to-peer) -->
