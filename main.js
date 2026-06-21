@@ -713,6 +713,55 @@ function applyRemoteHand(id) {
   if (tile) tile.el.classList.toggle("hand-up", remoteHands.has(id));
 }
 
+// ---- Per-peer connection quality ----
+// Each client polls its own media RTCPeerConnections (RTT + recent packet loss)
+// and shows a good/ok/poor pip on each remote tile. Local-only; no extra traffic.
+
+const qualityPrev = new Map(); // id -> { lost, recv } cumulative, for delta loss
+
+function classifyQuality(rttMs, lossRate) {
+  if ((rttMs != null && rttMs > 400) || lossRate > 0.08) return "poor";
+  if ((rttMs != null && rttMs > 150) || lossRate > 0.02) return "ok";
+  return "good";
+}
+
+function setTileQuality(tile, q, rttMs, lossRate) {
+  if (!tile || !tile.quality) return;
+  const el = tile.quality;
+  el.classList.remove("q-good", "q-ok", "q-poor");
+  if (!q) { el.hidden = true; el.removeAttribute("title"); return; }
+  el.hidden = false;
+  el.classList.add("q-" + q);
+  const parts = ["Connection: " + q];
+  if (rttMs != null) parts.push(rttMs + " ms");
+  if (lossRate) parts.push(Math.round(lossRate * 100) + "% loss");
+  el.title = parts.join(" · ");
+}
+
+async function pollQuality() {
+  if (!session) return;
+  const st = session.getState();
+  for (const [id, tile] of remoteTiles) {
+    const call = st.calls.get(id);
+    const pc = call && call.peerConnection;
+    if (!pc || !st.everConnected.has(id)) { setTileQuality(tile, null); qualityPrev.delete(id); continue; }
+    let stats;
+    try { stats = await pc.getStats(); } catch (_) { continue; }
+    let rtt = null, lost = 0, recv = 0;
+    stats.forEach((r) => {
+      if (r.type === "candidate-pair" && r.state === "succeeded" && r.currentRoundTripTime != null) rtt = r.currentRoundTripTime;
+      if (r.type === "inbound-rtp" && r.packetsReceived != null) { lost += r.packetsLost || 0; recv += r.packetsReceived || 0; }
+    });
+    const prev = qualityPrev.get(id) || { lost, recv };
+    const dLost = Math.max(0, lost - prev.lost);
+    const dRecv = Math.max(0, recv - prev.recv);
+    qualityPrev.set(id, { lost, recv });
+    const lossRate = dLost + dRecv > 0 ? dLost / (dLost + dRecv) : 0;
+    const rttMs = rtt != null ? Math.round(rtt * 1000) : null;
+    setTileQuality(tile, classifyQuality(rttMs, lossRate), rttMs, lossRate);
+  }
+}
+
 // Refresh the tile badges and the ordered queue panel.
 function updateHandsUI() {
   selfTile.classList.toggle("hand-up", handRaised);
@@ -821,6 +870,10 @@ function ensureRemoteTile(id) {
   hand.className = "tile-hand";
   hand.textContent = "✋";
 
+  const quality = document.createElement("div");
+  quality.className = "tile-quality";
+  quality.hidden = true;
+
   const veil = document.createElement("div");
   veil.className = "veil";
   veil.textContent = STATUS_TEXT.connecting;
@@ -828,11 +881,11 @@ function ensureRemoteTile(id) {
   // Video + veil are clipped inside the circular head; label + status dot live
   // on the unclipped wrapper so they aren't cut off by the circle.
   head.append(video, veil);
-  el.append(head, label, dot, mute, hand);
+  el.append(head, label, dot, mute, hand, quality);
   applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
-  tile = { el, head, video, veil, label, nameEl, status: statusEl };
+  tile = { el, head, video, veil, label, nameEl, status: statusEl, quality };
   remoteTiles.set(id, tile);
   renderStatus(statusEl, remotePresence.get(id) || "");
   applyRemoteMute(id);
@@ -3335,6 +3388,8 @@ window.__draw = () => strokes.size; // debug: count of whiteboard strokes
 window.__ball = () => (ball ? { ...ball } : null); // debug: ball state
 window.__tag = () => tagIt; // debug: who is "it"
 window.__games = () => [...games.values()].map((g) => ({ id: g.id, type: g.type, cells: g.cells, turn: g.turn, seats: g.seats, winner: g.winner })); // debug
+window.__quality = () => [...remoteTiles.values()].map((t) => (t.quality.hidden ? "hidden" : [...t.quality.classList].find((c) => c.startsWith("q-")))); // debug
+window.__forceQ = (rttMs, loss) => { const t = [...remoteTiles.values()][0]; if (t) setTileQuality(t, classifyQuality(rttMs, loss), rttMs, loss); }; // debug: force a classification
 window.__myid = () => myMeshId; // debug: our mesh id
 
 // Throw the selected emoji from your avatar toward where you click the stage.
@@ -3410,6 +3465,7 @@ toggleScreenBtn.addEventListener("click", toggleScreen);
 toggleMicBtn.addEventListener("click", toggleMute);
 toggleHandBtn.addEventListener("click", toggleHand);
 updateHandBtn();
+setInterval(pollQuality, 3000); // per-peer connection-quality pips (no-ops until connected)
 
 // ---- Sidebar: slide the whole panel off-screen and back ----
 const sidebarToggleBtn = document.getElementById("sidebar-toggle");
