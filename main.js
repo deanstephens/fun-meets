@@ -2204,6 +2204,7 @@ function onDrawUp() {
   strokes.set(s.id, s);
   myStrokeIds.push(s.id);
   if (session) session.broadcast({ type: "draw", op: "stroke", stroke: s });
+  saveBoard();
 }
 
 function undoDraw() {
@@ -2213,6 +2214,7 @@ function undoDraw() {
   strokes.delete(id);
   redrawStrokes();
   if (session) session.broadcast({ type: "draw", op: "remove", id });
+  saveBoard();
 }
 
 function clearDraw(broadcast) {
@@ -2220,6 +2222,7 @@ function clearDraw(broadcast) {
   myStrokeIds.length = 0;
   redrawStrokes();
   if (broadcast && session) session.broadcast({ type: "draw", op: "clear" });
+  saveBoard();
 }
 
 function sanitizeStroke(st) {
@@ -2242,6 +2245,7 @@ function handleDrawMessage(data) {
     data.strokes.forEach((st) => { const s = sanitizeStroke(st); if (s) strokes.set(s.id, s); });
     redrawStrokes();
   }
+  saveBoard(); // persist board changes received from peers too
 }
 
 function buildDrawUI() {
@@ -2669,10 +2673,12 @@ function boardKey() {
 
 function snapshotBoard() {
   return {
-    v: 1,
+    v: 2,
     bg: currentBg,
     cards: [...cards.values()].map((c) => ({ id: c.id, nx: c.nx, ny: c.ny, text: c.text, color: c.color, author: c.author })),
     zones: [...zones.values()].map((z) => ({ id: z.id, cx: z.cx, cy: z.cy, r: z.r })),
+    strokes: [...strokes.values()].map((s) => ({ id: s.id, color: s.color, w: s.w, pts: s.pts })),
+    games: [...games.values()].map((g) => ({ id: g.id, type: g.type, cells: g.cells, turn: g.turn, seats: g.seats, winner: g.winner, nx: g.nx, ny: g.ny })),
   };
 }
 
@@ -2703,6 +2709,17 @@ function applySnapshot(snap, broadcast) {
     snap.zones.forEach((z) => {
       upsertZone(z);
       if (broadcast) broadcastZone(zones.get(String(z.id)));
+    });
+  }
+  if (Array.isArray(snap.strokes)) {
+    snap.strokes.forEach((st) => { const s = sanitizeStroke(st); if (s) strokes.set(s.id, s); });
+    redrawStrokes();
+    if (broadcast && session && strokes.size) session.broadcast({ type: "draw", op: "sync", strokes: [...strokes.values()] });
+  }
+  if (Array.isArray(snap.games)) {
+    snap.games.forEach((g) => {
+      upsertGame(g, false);
+      if (broadcast) broadcastGame(games.get(String(g.id)));
     });
   }
   saveBoard();
@@ -3044,6 +3061,7 @@ function upsertGame(data, mine) {
   renderGame(g);
   // A winner just appeared (someone else's move ended it) — celebrate.
   if (g.winner && g.winner !== "draw" && !hadWinner) { burstConfetti(g.nx, g.ny); sfx("win"); }
+  saveBoard();
 }
 
 function buildGameEl(g) {
@@ -3121,6 +3139,7 @@ function playCell(g, target) {
   else if (g.winner !== "draw") { burstConfetti(g.nx, g.ny); sfx("win"); } // we won/lost — celebrate
   renderGame(g);
   broadcastGame(g);
+  saveBoard();
 }
 
 function checkGameWin(g) {
@@ -3145,12 +3164,14 @@ function resetGame(g) {
   g.winner = null;
   renderGame(g);
   broadcastGame(g);
+  saveBoard();
 }
 
 function closeGame(g) {
   if (g.el) g.el.remove();
   games.delete(g.id);
   if (session) session.broadcast({ type: "game", op: "close", id: g.id });
+  saveBoard();
 }
 
 function gameMessage(g) {
@@ -3165,7 +3186,7 @@ function handleGameMessage(data) {
   if (data.op === "upsert" && data.game) upsertGame(data.game, false);
   else if (data.op === "close" && data.id) {
     const g = games.get(String(data.id));
-    if (g) { if (g.el) g.el.remove(); games.delete(g.id); }
+    if (g) { if (g.el) g.el.remove(); games.delete(g.id); saveBoard(); }
   }
 }
 
