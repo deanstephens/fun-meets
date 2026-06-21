@@ -19,9 +19,17 @@ body {
 }
 
 #stage {
-  position: relative;
+  /* Pinned to the *visible* viewport. On iOS, 100vh is the larger viewport
+     (assumes hidden chrome) so content gets cut off, and the soft keyboard
+     shifts the layout — so we size/position to the visualViewport via JS
+     (--app-h / --app-top), with dvh then vh fallbacks. */
+  position: fixed;
+  left: 0;
+  top: var(--app-top, 0px);
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  height: var(--app-h, 100dvh);
   background:
     radial-gradient(circle at 20% 20%, rgba(108, 123, 255, 0.25), transparent 40%),
     radial-gradient(circle at 80% 70%, rgba(255, 108, 180, 0.2), transparent 45%),

@@ -315,6 +315,14 @@ The long-term direction is to grow the meeting from "a call you can move your we
   **defaults collapsed on small/touch screens** so the canvas isn't covered —
   pull it back in on demand. Defaults open on desktop.
 
+### Milestone 40 — iOS viewport / keyboard fixes ✅
+- The stage is now sized and pinned to the **visible viewport** (via the
+  `visualViewport` API with `dvh`/`vh` fallbacks) instead of `100vh`, so nothing
+  is **cut off at the bottom** on iPhone landscape, and opening the **soft
+  keyboard** shrinks the stage so the bottom controls/chat ride up above it
+  rather than throwing the page off. The 💬 touch button also opens the (collapsed)
+  sidebar so chat is reachable.
+
 ### Future milestones
 - More actions; move/delete cards. Mini-games, emotes, and more (see the open issues).
 - Game mechanics and shared activities layered onto the meeting space.
@@ -331,7 +339,7 @@ The long-term direction is to grow the meeting from "a call you can move your we
 
 ## Status
 
-🚧 Early development. Milestones 1–39 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), host re-election when the entry-point peer leaves, and reconnection that rides out transient network blips.
+🚧 Early development. Milestones 1–40 complete: movable webcams, an N-peer WebRTC mesh, real-time position sync, connection-status indicators with optional animated stick-figure bodies (with articulated arms/elbows), chat (speech bubbles + side panel), a developer console, avatar customisation (with an image-based clothing wardrobe and a dev calibration mode), emoji effects, a configurable room background, user-chosen display names, face auto-framing, a slash-command actions menu with shared cards, proximity-based spatial audio, huddle/breakout zones, a talking indicator, screen sharing, a board that survives everyone leaving (saved per room + file export/import), host re-election when the entry-point peer leaves, and reconnection that rides out transient network blips.
 
 ## Getting Started
 
