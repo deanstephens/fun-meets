@@ -1249,6 +1249,68 @@ body {
 .tile.holding.facing-left .figure .arm-l .forearm,
 .tile.holding.facing-left .figure .arm-r .forearm { transform: rotate(30deg) !important; }
 
+/* ---- Whiteboard ---- */
+/* Ink sits on the board behind avatars; in draw mode the canvas lifts to the
+   front and captures the pointer so you can sketch anywhere. */
+.draw-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+#stage.drawing .draw-layer {
+  z-index: 8;
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.draw-tools {
+  position: absolute;
+  bottom: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(12, 14, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  z-index: 12;
+}
+
+.draw-tools[hidden] {
+  display: none;
+}
+
+.draw-colors {
+  display: flex;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+.draw-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+
+.draw-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.draw-tools .ghost {
+  margin: 0;
+}
+
 /* ---- Shared toast (dice rolls, random picks) ---- */
 .toast {
   position: absolute;

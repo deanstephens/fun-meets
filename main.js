@@ -82,6 +82,10 @@ const avatarList = document.getElementById("avatar-list");
 // Actions / cards / zones elements
 const zoneLayer = document.getElementById("zone-layer");
 const cardLayer = document.getElementById("card-layer");
+const drawCanvas = document.getElementById("draw-layer");
+const drawCtx = drawCanvas.getContext("2d");
+const drawTools = document.getElementById("draw-tools");
+const drawColorsEl = document.getElementById("draw-colors");
 const actionsEl = document.getElementById("actions");
 const actionQueryInput = document.getElementById("action-query");
 const actionList = document.getElementById("action-list");
@@ -374,6 +378,7 @@ async function start() {
         const rem = timerRemaining();
         if (rem > 0) session.sendTo(id, { type: "timer", op: "start", remaining: rem });
         session.sendTo(id, { type: "collision", on: collisionOn });
+        if (strokes.size) session.sendTo(id, { type: "draw", op: "sync", strokes: [...strokes.values()] });
         if (poll) session.sendTo(id, {
           type: "poll", op: "sync",
           poll: { id: poll.id, question: poll.question, options: poll.options },
@@ -432,6 +437,8 @@ async function start() {
         handlePollMessage(data);
       } else if (data.type === "collision") {
         setCollision(data.on); // room-wide setting from the host
+      } else if (data.type === "draw") {
+        handleDrawMessage(data); // shared whiteboard strokes
       } else if (data.type === "emote") {
         const name = typeof data.name === "string" ? data.name : "";
         if (!EMOTES[name]) return; // unknown emote — ignore
@@ -893,6 +900,12 @@ function onKeyDown(e) {
   if (isTyping()) {
     if (e.key === "Escape" && document.activeElement) document.activeElement.blur();
     return; // let the input field handle the keystroke
+  }
+  // Escape leaves whiteboard draw mode.
+  if (e.key === "Escape" && drawMode) {
+    exitDraw();
+    e.preventDefault();
+    return;
   }
   // "/" opens the actions menu.
   if (e.key === "/" && running) {
@@ -1527,6 +1540,167 @@ function handlePollMessage(data) {
   }
 }
 
+// ---- Whiteboard (shared freehand drawing) ----
+// Strokes are stored as vector data (normalized points) so they redraw on
+// resize and can be handed to late joiners; rendered onto a canvas layer.
+
+const DRAW_COLORS = ["#1b1b1f", "#e5484d", "#f5a524", "#46d27f", "#5b8def", "#f4f4f8"];
+const DRAW_WIDTH = 3;
+const strokes = new Map(); // id -> { id, color, w, pts: [[nx,ny],...] }
+const myStrokeIds = []; // our strokes, in order, for undo
+let drawMode = false;
+let drawColor = DRAW_COLORS[0];
+let curStroke = null;
+
+function sizeDrawCanvas() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  drawCanvas.width = Math.round(w * dpr);
+  drawCanvas.height = Math.round(h * dpr);
+  drawCanvas.style.width = w + "px";
+  drawCanvas.style.height = h + "px";
+  drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+  redrawStrokes();
+}
+
+function paintStroke(s) {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!s.pts.length) return;
+  drawCtx.strokeStyle = s.color;
+  drawCtx.fillStyle = s.color;
+  drawCtx.lineWidth = s.w;
+  drawCtx.lineCap = "round";
+  drawCtx.lineJoin = "round";
+  if (s.pts.length === 1) {
+    drawCtx.beginPath();
+    drawCtx.arc(s.pts[0][0] * w, s.pts[0][1] * h, s.w / 2, 0, Math.PI * 2);
+    drawCtx.fill();
+    return;
+  }
+  drawCtx.beginPath();
+  drawCtx.moveTo(s.pts[0][0] * w, s.pts[0][1] * h);
+  for (let i = 1; i < s.pts.length; i++) drawCtx.lineTo(s.pts[i][0] * w, s.pts[i][1] * h);
+  drawCtx.stroke();
+}
+
+function redrawStrokes() {
+  drawCtx.clearRect(0, 0, stage.clientWidth, stage.clientHeight);
+  strokes.forEach(paintStroke);
+}
+
+function drawPoint(e) {
+  const r = stage.getBoundingClientRect();
+  return [clamp01((e.clientX - r.left) / stage.clientWidth), clamp01((e.clientY - r.top) / stage.clientHeight)];
+}
+
+function onDrawDown(e) {
+  if (!drawMode || !running) return;
+  e.preventDefault();
+  try { drawCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+  curStroke = { id: "k" + Math.random().toString(36).slice(2, 9), color: drawColor, w: DRAW_WIDTH, pts: [drawPoint(e)] };
+}
+
+function onDrawMove(e) {
+  if (!curStroke) return;
+  const p = drawPoint(e);
+  const last = curStroke.pts[curStroke.pts.length - 1];
+  if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 0.003) return; // thin out points
+  curStroke.pts.push(p);
+  const w = stage.clientWidth, h = stage.clientHeight;
+  drawCtx.strokeStyle = curStroke.color;
+  drawCtx.lineWidth = curStroke.w;
+  drawCtx.lineCap = "round";
+  drawCtx.lineJoin = "round";
+  drawCtx.beginPath();
+  drawCtx.moveTo(last[0] * w, last[1] * h);
+  drawCtx.lineTo(p[0] * w, p[1] * h);
+  drawCtx.stroke();
+}
+
+function onDrawUp() {
+  if (!curStroke) return;
+  const s = curStroke;
+  curStroke = null;
+  if (s.pts.length === 1) paintStroke(s); // a tap = a dot
+  strokes.set(s.id, s);
+  myStrokeIds.push(s.id);
+  if (session) session.broadcast({ type: "draw", op: "stroke", stroke: s });
+}
+
+function undoDraw() {
+  let id = null;
+  while (myStrokeIds.length) { const c = myStrokeIds.pop(); if (strokes.has(c)) { id = c; break; } }
+  if (!id) return;
+  strokes.delete(id);
+  redrawStrokes();
+  if (session) session.broadcast({ type: "draw", op: "remove", id });
+}
+
+function clearDraw(broadcast) {
+  strokes.clear();
+  myStrokeIds.length = 0;
+  redrawStrokes();
+  if (broadcast && session) session.broadcast({ type: "draw", op: "clear" });
+}
+
+function sanitizeStroke(st) {
+  if (!st || !Array.isArray(st.pts) || !st.pts.length) return null;
+  const pts = st.pts.slice(0, 4000).map((p) => [clamp01(+p[0] || 0), clamp01(+p[1] || 0)]);
+  const color = typeof st.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(st.color) ? st.color : DRAW_COLORS[0];
+  const w = Math.min(20, Math.max(1, +st.w || DRAW_WIDTH));
+  return { id: String(st.id || "k" + Math.random().toString(36).slice(2, 9)), color, w, pts };
+}
+
+function handleDrawMessage(data) {
+  if (data.op === "stroke" && data.stroke) {
+    const s = sanitizeStroke(data.stroke);
+    if (s) { strokes.set(s.id, s); paintStroke(s); }
+  } else if (data.op === "remove" && data.id) {
+    if (strokes.delete(String(data.id))) redrawStrokes();
+  } else if (data.op === "clear") {
+    clearDraw(false);
+  } else if (data.op === "sync" && Array.isArray(data.strokes)) {
+    data.strokes.forEach((st) => { const s = sanitizeStroke(st); if (s) strokes.set(s.id, s); });
+    redrawStrokes();
+  }
+}
+
+function buildDrawUI() {
+  DRAW_COLORS.forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "draw-swatch";
+    b.dataset.color = c;
+    b.style.background = c;
+    b.setAttribute("aria-label", "Pen colour");
+    b.addEventListener("click", () => { drawColor = c; updateDrawSwatches(); });
+    drawColorsEl.appendChild(b);
+  });
+  updateDrawSwatches();
+}
+
+function updateDrawSwatches() {
+  [...drawColorsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.color === drawColor));
+}
+
+function enterDraw() {
+  drawMode = true;
+  stage.classList.add("drawing");
+  drawTools.hidden = false;
+  updateDrawSwatches();
+}
+
+function exitDraw() {
+  drawMode = false;
+  curStroke = null;
+  stage.classList.remove("drawing");
+  drawTools.hidden = true;
+}
+
+function toggleDraw() {
+  if (drawMode) exitDraw(); else enterDraw();
+}
+
 // ---- Emotes (one-shot avatar animations) ----
 
 function playEmote(name) {
@@ -1731,6 +1905,12 @@ const ACTIONS = [
     label: "Close poll",
     description: "End the active poll",
     run: () => closePoll(true),
+  },
+  {
+    id: "whiteboard",
+    label: "Whiteboard",
+    description: "Draw freehand on the shared board",
+    run: toggleDraw,
   },
   {
     id: "create-card",
@@ -2307,6 +2487,7 @@ function onResize() {
   cards.forEach(positionCard);
   if (heldCardId) carryCardToMe(); // keep the held card snapped to our hands
   zones.forEach(positionZone);
+  sizeDrawCanvas();
 }
 
 async function copyInviteLink() {
@@ -2447,10 +2628,11 @@ function updateScreenBtn() {
 // getDisplayMedia picker, which can't run in automated tests).
 window.__shareScreen = (stream) => startSharing(stream);
 window.__stopScreen = () => stopSharing();
+window.__draw = () => strokes.size; // debug: count of whiteboard strokes
 
 // Throw the selected emoji from your avatar toward where you click the stage.
 function onStageClick(e) {
-  if (!running) return;
+  if (!running || drawMode) return; // in draw mode, clicks are ink, not emoji throws
   if (e.target.closest("#sidebar, #topbar, #controls, #overlay, #actions, #calibrate, .card, button, input, textarea, a")) return;
   const rect = stage.getBoundingClientRect();
   throwEmoji(e.clientX - rect.left, e.clientY - rect.top);
@@ -2461,6 +2643,8 @@ applyAvatar(selfTile, avatarConfig);
 buildAvatarUI();
 buildEmojiUI();
 buildBgUI();
+buildDrawUI();
+sizeDrawCanvas();
 stage.classList.add("bodies-on");
 
 // Load the remembered (or a random) name and pre-fill the join screen.
@@ -2487,6 +2671,14 @@ toggleBodyBtn.addEventListener("click", toggleBodies);
 toggleFrameBtn.addEventListener("click", toggleFaceFrame);
 toggleSpatialBtn.addEventListener("click", toggleSpatial);
 toggleCollisionBtn.addEventListener("click", toggleCollision);
+// Whiteboard: drawing on the canvas + toolbar.
+drawCanvas.addEventListener("pointerdown", onDrawDown);
+drawCanvas.addEventListener("pointermove", onDrawMove);
+drawCanvas.addEventListener("pointerup", onDrawUp);
+drawCanvas.addEventListener("pointercancel", onDrawUp);
+document.getElementById("draw-undo").addEventListener("click", undoDraw);
+document.getElementById("draw-clear").addEventListener("click", () => clearDraw(true));
+document.getElementById("draw-done").addEventListener("click", exitDraw);
 toggleScreenBtn.addEventListener("click", toggleScreen);
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.

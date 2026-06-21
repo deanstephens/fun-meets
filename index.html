@@ -11,6 +11,9 @@
     <!-- Huddle zones render here, behind the avatars -->
     <div id="zone-layer" class="zone-layer"></div>
 
+    <!-- Shared whiteboard ink (behind avatars; lifts to the front in draw mode) -->
+    <canvas id="draw-layer" class="draw-layer"></canvas>
+
     <!-- Shared transient banner (dice rolls, random picks, …) -->
     <div id="toast" class="toast">
       <span class="toast-emoji"></span>
@@ -77,6 +80,14 @@
 
     <!-- Emoji particles render here (pointer-events: none) -->
     <div id="emoji-layer" class="emoji-layer"></div>
+
+    <!-- Whiteboard toolbar (shown only in draw mode) -->
+    <div id="draw-tools" class="draw-tools" hidden>
+      <div id="draw-colors" class="draw-colors"></div>
+      <button id="draw-undo" class="ghost">Undo</button>
+      <button id="draw-clear" class="ghost">Clear</button>
+      <button id="draw-done" class="ghost">Done</button>
+    </div>
 
     <!-- Avatar calibration (dev only; shown with ?calibrate=1) -->
     <div id="calibrate" class="calibrate" hidden>
