@@ -161,6 +161,26 @@ body {
   display: flex;
 }
 
+/* Per-peer connection-quality pip (bottom-left of a tile). */
+.tile-quality {
+  position: absolute;
+  bottom: 11%;
+  left: 11%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+
+.tile-quality[hidden] {
+  display: none;
+}
+
+.tile-quality.q-good { background: #46d27f; }
+.tile-quality.q-ok { background: #f5c451; }
+.tile-quality.q-poor { background: #ff5a5a; }
+
 /* Raised-hand badge (top-right of a tile). */
 .tile-hand {
   position: absolute;
