@@ -70,7 +70,10 @@
       <div class="head">
         <video id="self-video" autoplay playsinline muted></video>
       </div>
-      <div class="tile-label">You</div>
+      <div class="tile-label">
+        <span class="tile-name">You</span>
+        <span class="tile-status empty" id="self-status"></span>
+      </div>
     </div>
 
     <!-- Remote peer tiles are added here dynamically -->
@@ -163,6 +166,15 @@
           <button id="toggle-spatial" class="ghost">Spatial audio: On</button>
           <!-- Host-only: room-wide collision toggle (hidden for guests) -->
           <button id="toggle-collision" class="ghost" hidden>Collision: Off</button>
+          <!-- Presence status, shown under your name -->
+          <div class="status-set">
+            <input id="status-input" type="text" maxlength="40" autocomplete="off" placeholder="Set a status…" />
+            <div class="status-presets">
+              <button class="ghost" type="button" data-status="">Available</button>
+              <button class="ghost" type="button" data-status="Away">Away</button>
+              <button class="ghost" type="button" data-status="Busy">Busy</button>
+            </div>
+          </div>
         </div>
       </section>
 
