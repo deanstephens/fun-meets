@@ -956,6 +956,21 @@ body {
   color: #46d27f;
 }
 
+/* Whispers: a private 1:1 message, clearly distinct from room chat. */
+.msg.private {
+  background: rgba(150, 120, 255, 0.14);
+  border-left: 2px solid #b39bff;
+  border-radius: 6px;
+  padding: 3px 7px;
+  margin: 2px 0;
+  font-style: italic;
+}
+
+.msg.private .who {
+  color: #c3b1ff;
+  font-style: normal;
+}
+
 .chat {
   margin: 0;
   padding: 10px;

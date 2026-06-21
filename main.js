@@ -429,6 +429,9 @@ async function start() {
         const tile = ensureRemoteTile(id);
         showBubble(tile.el, text);
         addChatMessage(displayName(id), text, false);
+      } else if (data.type === "whisper" && typeof data.text === "string") {
+        // A private 1:1 message — shown only in our chat panel, marked private.
+        addChatMessage(displayName(id), data.text.slice(0, 200), false, true);
       } else if (data.type === "name") {
         remoteNames.set(id, sanitizeName(data.name) || shortId(id));
         applyRemoteName(id);
@@ -1035,19 +1038,39 @@ function sendChat(e) {
   chatInput.value = "";
   chatInput.blur(); // return control to movement
   if (!text) return;
+  // "/w <name> <message>" (or /whisper) sends a private 1:1 message instead.
+  if (/^\/(w|whisper)\b/i.test(text)) { sendWhisper(text); return; }
   showBubble(selfTile, text); // show our own bubble locally
   addChatMessage("You", text, true);
   if (session) session.broadcast({ type: "chat", text });
 }
 
+// Parse "/w <name> <message>", find the connected peer by display name (longest
+// match, so multi-word names work), and send it privately via sendTo.
+function sendWhisper(text) {
+  const rest = text.replace(/^\/(w|whisper)\s*/i, "");
+  let bestId = null, bestName = "";
+  const low = rest.toLowerCase();
+  remoteTiles.forEach((_, id) => {
+    const name = displayName(id);
+    const n = name.toLowerCase();
+    if ((low === n || low.startsWith(n + " ")) && name.length > bestName.length) { bestId = id; bestName = name; }
+  });
+  if (!bestId) { addChatMessage("whisper", "no one connected matches that name — use /w <name> <message>", false, true); return; }
+  const msg = rest.slice(bestName.length).trim().slice(0, 200);
+  if (!msg) { addChatMessage("whisper", `add a message after the name to whisper ${bestName}`, false, true); return; }
+  if (session) session.sendTo(bestId, { type: "whisper", text: msg });
+  addChatMessage(`You → ${bestName}`, msg, true, true); // our own copy, marked private
+}
+
 // ---- Persistent chat panel ----
 
-function addChatMessage(who, text, isYou) {
+function addChatMessage(who, text, isYou, priv) {
   const msg = document.createElement("div");
-  msg.className = "msg" + (isYou ? " you" : "");
+  msg.className = "msg" + (isYou ? " you" : "") + (priv ? " private" : "");
   const w = document.createElement("span");
   w.className = "who";
-  w.textContent = who;
+  w.textContent = (priv ? "🔒 " : "") + who;
   msg.append(w, document.createTextNode(text));
   chatLog.appendChild(msg);
   chatLog.scrollTop = chatLog.scrollHeight; // keep the latest in view
