@@ -63,6 +63,7 @@ const toggleCollisionBtn = document.getElementById("toggle-collision");
 const statusInput = document.getElementById("status-input");
 const selfStatusEl = document.getElementById("self-status");
 const toggleScreenBtn = document.getElementById("toggle-screen");
+const toggleMicBtn = document.getElementById("toggle-mic");
 const screenLayer = document.getElementById("screen-layer");
 const sidebar = document.getElementById("sidebar");
 const chatForm = document.getElementById("chat");
@@ -137,6 +138,10 @@ const remoteNames = new Map();
 // id -> presence status text for each remote participant.
 const remotePresence = new Map();
 let presence = ""; // our own status ("" = available); persisted across reloads
+
+// id -> whether each remote participant has muted their mic.
+const remoteMuted = new Map();
+let micMuted = false; // is our mic muted?
 
 // Our own display name (persisted across reloads). Initialised in the setup
 // section below, once the name word-lists are defined.
@@ -289,6 +294,7 @@ async function start() {
     }
     selfVideo.srcObject = localStream;
     updateFrameBtn();
+    applyMicTrack(); // honour a restored mute preference on the live track
     voiceActivity.addStream("self", localStream); // talking indicator for us
   } catch (err) {
     showError(err);
@@ -362,6 +368,7 @@ async function start() {
       peerStatuses.delete(id);
       remoteNames.delete(id);
       remotePresence.delete(id);
+      remoteMuted.delete(id);
       // The host frees a departed player's game seats so the game stays playable.
       if (amHost) games.forEach((g) => {
         let changed = false;
@@ -386,6 +393,7 @@ async function start() {
       session.sendTo(id, avatarMessage());
       session.sendTo(id, nameMessage());
       session.sendTo(id, presenceMessage());
+      session.sendTo(id, muteMessage());
       // Only the host hands out shared board state (background + cards), so a
       // newcomer's empty state doesn't overwrite it.
       if (amHost) {
@@ -438,6 +446,9 @@ async function start() {
       } else if (data.type === "status") {
         remotePresence.set(id, sanitizeStatus(data.status));
         applyRemotePresence(id);
+      } else if (data.type === "mute") {
+        remoteMuted.set(id, !!data.muted);
+        applyRemoteMute(id);
       } else if (data.type === "avatar") {
         const cfg = normalizeAvatar(data.config);
         remoteAvatars.set(id, cfg);
@@ -621,6 +632,43 @@ function applyRemotePresence(id) {
   if (tile) renderStatus(tile.status, remotePresence.get(id) || "");
 }
 
+// ---- Microphone mute ----
+
+function loadMutePref() {
+  try { return localStorage.getItem("funmeets-muted") === "on"; } catch (_) { return false; }
+}
+
+function applyMicTrack() {
+  if (localStream) localStream.getAudioTracks().forEach((t) => { t.enabled = !micMuted; });
+}
+
+function updateMicBtn() {
+  toggleMicBtn.textContent = micMuted ? "Unmute" : "Mute";
+  toggleMicBtn.classList.toggle("active", micMuted);
+  selfTile.classList.toggle("mic-off", micMuted);
+}
+
+function muteMessage() {
+  return { type: "mute", muted: micMuted };
+}
+
+function setMute(muted, broadcast) {
+  micMuted = !!muted;
+  applyMicTrack();
+  try { localStorage.setItem("funmeets-muted", micMuted ? "on" : "off"); } catch (_) {}
+  updateMicBtn();
+  if (broadcast && session) session.broadcast(muteMessage());
+}
+
+function toggleMute() {
+  setMute(!micMuted, true);
+}
+
+function applyRemoteMute(id) {
+  const tile = remoteTiles.get(id);
+  if (tile) tile.el.classList.toggle("mic-off", !!remoteMuted.get(id));
+}
+
 // ---- Remote tiles -------------------------------------------------------
 
 function shortId(id) {
@@ -704,6 +752,10 @@ function ensureRemoteTile(id) {
   const dot = document.createElement("div");
   dot.className = "status-dot";
 
+  const mute = document.createElement("div");
+  mute.className = "tile-mute";
+  mute.textContent = "🔇";
+
   const veil = document.createElement("div");
   veil.className = "veil";
   veil.textContent = STATUS_TEXT.connecting;
@@ -711,13 +763,14 @@ function ensureRemoteTile(id) {
   // Video + veil are clipped inside the circular head; label + status dot live
   // on the unclipped wrapper so they aren't cut off by the circle.
   head.append(video, veil);
-  el.append(head, label, dot);
+  el.append(head, label, dot, mute);
   applyAvatar(el, normalizeAvatar(remoteAvatars.get(id)));
   stage.appendChild(el);
 
   tile = { el, head, video, veil, label, nameEl, status: statusEl };
   remoteTiles.set(id, tile);
   renderStatus(statusEl, remotePresence.get(id) || "");
+  applyRemoteMute(id);
 
   // Use their reported position if we have one, otherwise the fallback grid.
   if (remotePositions.has(id)) applyRemotePosition(id);
@@ -3197,6 +3250,10 @@ presence = loadPresence();
 statusInput.value = presence;
 renderStatus(selfStatusEl, presence);
 
+// Restore the saved mic-mute preference (applied to the track once we have it).
+micMuted = loadMutePref();
+updateMicBtn();
+
 startBtn.addEventListener("click", start);
 usernameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); start(); }
@@ -3234,6 +3291,7 @@ document.getElementById("draw-undo").addEventListener("click", undoDraw);
 document.getElementById("draw-clear").addEventListener("click", () => clearDraw(true));
 document.getElementById("draw-done").addEventListener("click", exitDraw);
 toggleScreenBtn.addEventListener("click", toggleScreen);
+toggleMicBtn.addEventListener("click", toggleMute);
 // Screen capture isn't available on iOS/iPadOS (WebKit has no getDisplayMedia),
 // so hide the button there rather than leave a control that does nothing.
 if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
